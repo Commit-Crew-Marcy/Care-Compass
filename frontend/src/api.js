@@ -1,6 +1,6 @@
 // One place for every backend call. The JWT is kept in localStorage and
 // attached as a Bearer header on protected requests.
-const BASE = 'http://localhost:8000'
+const BASE = 'https://care-compass-4gi5.onrender.com'
 
 // ---- token + user helpers ----
 export function getToken() { return localStorage.getItem('cc_token') }
