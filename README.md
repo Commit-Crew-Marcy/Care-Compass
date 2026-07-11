@@ -138,7 +138,7 @@ curl -X POST http://localhost:8000/api/eligibility/check \
 - [x] User authentication: register, login, logout, profile (GET /api/auth/me)
 - [x] User-generated resource with full CRUD: saved screenings
 - [x] GitHub repo with README containing the product spec
-- [ ] Deployment link (add after deploying): YOUR_LINK_HERE
+- [x] Deployment link: https://care-compass-three.vercel.app
 
 ## Notes
 
