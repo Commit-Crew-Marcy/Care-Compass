@@ -15,7 +15,11 @@ Team Commit Crew — Zoulkarnein (Project Lead), Ashar (Scrum Master), Ibrahima 
 3. The React frontend shows matched programs as cards, each opening a detail
    page with a plain-language description, why the user may qualify, required
    documents, and the official application link.
-4. (Stretch) An AI assistant explains benefits in plain language via the
+4. Users can create an account (register/login/logout with bcrypt-hashed
+   passwords and JWT tokens) and save their screenings — a user-generated
+   resource with full CRUD (create, read, update/rename, delete). Updating
+   a screening's answers automatically re-runs the eligibility engine.
+5. (Stretch) An AI assistant explains benefits in plain language via the
    Anthropic API — the Python engine decides eligibility, Claude only explains.
 
 ## Project structure
@@ -26,7 +30,11 @@ carecompass/
 │   ├── main.py               FastAPI app entry — CORS + router registration
 │   ├── requirements.txt
 │   ├── .env.example          Copy to .env for Postgres / AI key config
+│   ├── core/
+│   │   └── security.py       Password hashing (bcrypt) + JWT tokens
 │   ├── routers/
+│   │   ├── auth.py           POST /api/auth/{register,login,logout}, GET /api/auth/me
+│   │   ├── screenings.py     Full CRUD on saved screenings (auth required)
 │   │   ├── eligibility.py    POST /api/eligibility/check
 │   │   ├── benefits.py       GET /api/benefits, GET /api/benefits/:id
 │   │   └── ai.py             POST /api/ai/chat (stretch)
@@ -45,8 +53,11 @@ carecompass/
         ├── index.css         Blue & white palette, senior-friendly sizing
         └── pages/
             ├── Questionnaire.jsx   5-step wizard, bottom progress bar
-            ├── Results.jsx         Matched benefit cards
-            └── BenefitDetail.jsx   Description, reasons, requirements, apply link
+            ├── Results.jsx         Matched benefit cards + save results
+            ├── BenefitDetail.jsx   Description, reasons, requirements, apply link
+            ├── Login.jsx           Log in
+            ├── Register.jsx        Create an account
+            └── MyScreenings.jsx    Saved screenings: list, rename, delete
 ```
 
 ## Setup — backend (terminal 1)
@@ -102,6 +113,32 @@ curl -X POST http://localhost:8000/api/eligibility/check \
   -H "Content-Type: application/json" \
   -d '{"age":67,"income":18000,"state":"CA","householdSize":2,"currentCoverage":["medicare"]}'
 ```
+
+
+## Deployment (Render + Vercel, both free)
+
+### Backend on Render
+1. Go to https://render.com, sign in with GitHub, click New → Web Service
+2. Select the Commit-Crew-Marcy/Care-Compass repo
+3. Settings: Root Directory `backend`, Build Command `pip install -r requirements.txt`,
+   Start Command `uvicorn main:app --host 0.0.0.0 --port $PORT`
+4. Add environment variable `SECRET_KEY` set to any long random string
+5. Deploy, then open the Render shell and run `python -m db.seed` once
+6. Copy your Render URL (e.g. https://carecompass-api.onrender.com)
+
+### Frontend on Vercel
+1. In `frontend/src/api.js` change BASE to your Render URL, commit and push
+2. In `backend/main.py` add your Vercel URL to the CORS allow_origins list
+3. Go to https://vercel.com, sign in with GitHub, click Add New → Project
+4. Select the repo, set Root Directory to `frontend`, deploy
+5. Put the Vercel link at the top of this README for the assignment
+
+## Assignment checklist
+- [x] Python + FastAPI backend
+- [x] User authentication: register, login, logout, profile (GET /api/auth/me)
+- [x] User-generated resource with full CRUD: saved screenings
+- [x] GitHub repo with README containing the product spec
+- [ ] Deployment link (add after deploying): YOUR_LINK_HERE
 
 ## Notes
 

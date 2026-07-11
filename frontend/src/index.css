@@ -154,3 +154,33 @@ input:focus, select:focus { outline: 3px solid var(--mid); border-color: var(--n
 ol.req-list { padding-left: 24px; }
 ol.req-list li { margin-bottom: 8px; }
 .disclaimer { font-size: 14px; color: var(--navy); background: var(--tint); border-radius: 8px; padding: 12px 14px; margin-top: 24px; }
+
+/* --- nav additions for auth --- */
+.nav { justify-content: space-between; }
+.nav-brand { color: var(--white); text-decoration: none; font-size: 20px; font-weight: 600; }
+.nav-links { display: flex; align-items: center; gap: 18px; font-size: 15px; font-weight: 500; }
+.nav-links a { color: var(--white); text-decoration: none; }
+.nav-links a:hover { text-decoration: underline; }
+.nav-user { color: var(--light); font-weight: 400; }
+.nav-logout {
+  background: transparent;
+  color: var(--white);
+  border: 2px solid var(--light);
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.nav-logout:hover { background: var(--navy-dark); }
+form button.btn { margin-top: 6px; }
+.disclaimer a { color: var(--navy); font-weight: 600; }
+.save-banner {
+  background: var(--tint);
+  border: 2px solid var(--light);
+  border-radius: 8px;
+  padding: 14px;
+  margin-bottom: 18px;
+}
+.save-banner .btn { margin-top: 10px; }
+.success-box { background: #EAF3DE; color: #27500A; border-radius: 8px; padding: 14px; margin-bottom: 18px; }

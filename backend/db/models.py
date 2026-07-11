@@ -55,3 +55,39 @@ class Requirement(Base):
     display_order = Column(Integer, nullable=False, default=0)
 
     benefit = relationship("Benefit", back_populates="requirements")
+
+
+class User(Base):
+    """Registered account. Matches the optional users table from the spec."""
+
+    __tablename__ = "users"
+
+    user_id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, unique=True, nullable=False, index=True)
+    password_hash = Column(String, nullable=False)
+    display_name = Column(String, nullable=True)
+
+    screenings = relationship("Screening", back_populates="user", cascade="all, delete-orphan")
+
+
+class Screening(Base):
+    """A saved eligibility check — the user-generated CRUD resource.
+    Users can create, list, rename (update), and delete their screenings.
+    Array/list fields are stored as JSON strings for SQLite compatibility."""
+
+    __tablename__ = "screenings"
+
+    screening_id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False)
+    name = Column(String, nullable=False, default="My screening")
+    age = Column(Integer, nullable=False)
+    income = Column(Integer, nullable=False)
+    state = Column(String, nullable=False)
+    household_size = Column(Integer, nullable=False, default=1)
+    disability_status = Column(Boolean, nullable=False, default=False)
+    veteran_status = Column(Boolean, nullable=False, default=False)
+    insurance_status = Column(Boolean, nullable=False, default=False)
+    current_coverage = Column(Text, nullable=False, default="[]")  # JSON list
+    matched_benefits = Column(Text, nullable=False, default="[]")  # JSON list
+
+    user = relationship("User", back_populates="screenings")

@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from db.database import Base, engine
-from routers import ai, benefits, eligibility
+from routers import ai, auth, benefits, eligibility, screenings
 
 Base.metadata.create_all(bind=engine)
 
@@ -25,7 +25,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth.router)
 app.include_router(eligibility.router)
+app.include_router(screenings.router)
 app.include_router(benefits.router)
 app.include_router(ai.router)
 

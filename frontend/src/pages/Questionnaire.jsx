@@ -70,7 +70,7 @@ export default function Questionnaire() {
     setLoading(true)
     setError('')
     try {
-      const results = await checkEligibility({
+      const intake = {
         age: Number(form.age),
         income: Number(form.income),
         state: form.state,
@@ -79,8 +79,9 @@ export default function Questionnaire() {
         veteranStatus: form.veteranStatus,
         insuranceStatus: form.insuranceStatus,
         currentCoverage: form.currentCoverage,
-      })
-      navigate('/results', { state: { results } })
+      }
+      const results = await checkEligibility(intake)
+      navigate('/results', { state: { results, intake } })
     } catch (err) {
       setError('Something went wrong finding your benefits. Please make sure the server is running and try again.')
     } finally {
