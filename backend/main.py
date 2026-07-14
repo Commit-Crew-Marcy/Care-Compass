@@ -14,12 +14,20 @@ from routers import ai, auth, benefits, eligibility, screenings
 
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="CareCompass API", version="0.1.0")
+app = FastAPI(title="CareCompass API", version="0.2.0")
 
-# Allow the Vite dev server to call the API
+# Allow the deployed frontend and the Vite dev server to call the API
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "https://care-compass-three.vercel.app",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
+        "http://localhost:5175",
+        "http://127.0.0.1:5175",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

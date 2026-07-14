@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router-dom'
 import { getBenefit } from '../api'
+import ChatPanel from '../components/ChatPanel'
 
 export default function BenefitDetail() {
   const { id } = useParams()
@@ -57,6 +58,8 @@ export default function BenefitDetail() {
         CareCompass is an informational guide, not an official eligibility
         determination. Confirm details with the program's agency before applying.
       </p>
+
+      <ChatPanel contextBenefits={[benefit]} />
     </main>
   )
 }

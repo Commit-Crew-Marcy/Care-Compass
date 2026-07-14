@@ -1,6 +1,29 @@
 // One place for every backend call. The JWT is kept in localStorage and
 // attached as a Bearer header on protected requests.
-const BASE = 'https://care-compass-4gi5.onrender.com'
+//
+// Base URL resolution order: an explicit VITE_API_BASE_URL always wins;
+// otherwise dev mode talks to the local backend and a production build
+// talks to the deployed Render API. Exported as a pure function (instead
+// of reading import.meta.env inline) so it can be unit tested directly.
+export function resolveApiBase(envUrl, isDev) {
+  const raw = envUrl || (isDev ? 'http://localhost:8000' : 'https://care-compass-4gi5.onrender.com')
+  return raw.replace(/\/+$/, '')
+}
+
+const BASE = resolveApiBase(import.meta.env.VITE_API_BASE_URL, import.meta.env.DEV)
+
+// Structured error thrown by every failed request. UI code can branch on
+// `status` / `isNetworkError` instead of parsing a message string.
+export class ApiError extends Error {
+  constructor({ status = null, detail = null, validationErrors = null, isNetworkError = false } = {}) {
+    super(detail || (isNetworkError ? 'Network error' : `Request failed (${status})`))
+    this.name = 'ApiError'
+    this.status = status
+    this.detail = detail
+    this.validationErrors = validationErrors
+    this.isNetworkError = isNetworkError
+  }
+}
 
 // ---- token + user helpers ----
 export function getToken() { return localStorage.getItem('cc_token') }
@@ -20,30 +43,71 @@ export function clearSession() {
 async function request(path, { method = 'GET', body, auth = false } = {}) {
   const headers = { 'Content-Type': 'application/json' }
   if (auth) headers['Authorization'] = `Bearer ${getToken()}`
-  const res = await fetch(`${BASE}${path}`, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  })
+
+  let res
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+    })
+  } catch (err) {
+    // fetch() only throws for network-level failures (unreachable host,
+    // CORS rejection, offline) — never for HTTP error status codes.
+    throw new ApiError({ isNetworkError: true, detail: err.message })
+  }
+
   if (!res.ok) {
     let detail = `Request failed (${res.status})`
-    try { detail = (await res.json()).detail || detail } catch { /* keep default */ }
-    throw new Error(detail)
+    let validationErrors = null
+    try {
+      const data = await res.json()
+      if (res.status === 422 && Array.isArray(data.detail)) {
+        // FastAPI validation errors: [{ loc: ["body", "age"], msg: "...", type: "..." }]
+        validationErrors = data.detail.map((d) => ({
+          field: Array.isArray(d.loc) ? d.loc.filter((p) => p !== 'body').join('.') : String(d.loc ?? ''),
+          message: d.msg,
+        }))
+        detail = 'Validation failed'
+      } else if (typeof data.detail === 'string') {
+        detail = data.detail
+      }
+    } catch { /* body wasn't JSON — keep the default detail */ }
+    throw new ApiError({ status: res.status, detail, validationErrors })
   }
   return res.json()
 }
 
+const RETRYABLE_STATUSES = [502, 503, 504]
+
+// Retries exactly once, only for network errors or the given retryable HTTP
+// statuses (Render cold starts commonly surface as one of these). Never
+// retries 4xx — a validation error will fail identically on a second try.
+async function requestWithRetry(path, opts) {
+  try {
+    return await request(path, opts)
+  } catch (err) {
+    const shouldRetry = err instanceof ApiError && (err.isNetworkError || RETRYABLE_STATUSES.includes(err.status))
+    if (!shouldRetry) throw err
+    await new Promise((resolve) => setTimeout(resolve, 3000))
+    return request(path, opts)
+  }
+}
+
 // ---- public ----
 export const checkEligibility = (intake) =>
-  request('/api/eligibility/check', { method: 'POST', body: intake })
+  requestWithRetry('/api/eligibility/check', { method: 'POST', body: intake })
 
 export const getBenefit = (id) => request(`/api/benefits/${id}`)
 
+export const askAi = (question, matchedBenefits = []) =>
+  request('/api/ai/chat', { method: 'POST', body: { question, matchedBenefits } })
+
 // ---- auth ----
-export async function register(email, password, displayName) {
+export async function register(email, password) {
   const data = await request('/api/auth/register', {
     method: 'POST',
-    body: { email, password, displayName },
+    body: { email, password },
   })
   saveSession(data)
   return data.user

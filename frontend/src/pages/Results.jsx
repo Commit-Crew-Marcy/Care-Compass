@@ -1,9 +1,44 @@
 import { useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { createScreening, getToken } from '../api'
+import ChatPanel from '../components/ChatPanel'
 
-// Results arrive via router state from the questionnaire. Logged-in users
+// Results arrive via router state from the questionnaire. Matches are
+// grouped by category so a long list stays scannable, and the AI chat
+// panel floats on this page with the matches as context. Logged-in users
 // can SAVE the screening (the CREATE of the CRUD resource).
+
+const GROUPS = [
+  {
+    title: 'Medicare and Medicare savings',
+    types: ['medicare_part_a', 'medicare_part_b', 'medicare_advantage', 'medicare_part_d', 'medigap', 'extra_help', 'msp'],
+  },
+  {
+    title: 'Health coverage',
+    types: ['medicaid', 'emergency_medicaid', 'chip', 'marketplace'],
+  },
+  {
+    title: 'Food and family support',
+    types: ['snap', 'wic', 'school_lunch', 'head_start', 'tanf'],
+  },
+  {
+    title: 'Money and utility help',
+    types: ['ssi', 'liheap'],
+  },
+]
+
+function groupResults(results) {
+  const used = new Set()
+  const grouped = GROUPS.map((g) => {
+    const items = results.filter((b) => g.types.includes(b.programType))
+    items.forEach((b) => used.add(b.id))
+    return { title: g.title, items }
+  }).filter((g) => g.items.length > 0)
+
+  const rest = results.filter((b) => !used.has(b.id))
+  if (rest.length > 0) grouped.push({ title: 'Other programs', items: rest })
+  return grouped
+}
 
 export default function Results() {
   const { state } = useLocation()
@@ -34,6 +69,8 @@ export default function Results() {
       setError(e.message)
     }
   }
+
+  const grouped = groupResults(results)
 
   return (
     <main className="container">
@@ -74,18 +111,25 @@ export default function Results() {
         </div>
       )}
 
-      {results.map((b) => (
-        <Link to={`/benefits/${b.id}`} state={{ matchReason: b.matchReason }} className="card" key={b.id}>
-          <span className="badge">✓ Likely eligible</span>
-          <h2>{b.name}</h2>
-          <p>{b.eligibilitySummary}</p>
-        </Link>
+      {grouped.map((group) => (
+        <section key={group.title}>
+          <h2 className="group-title">{group.title}</h2>
+          {group.items.map((b) => (
+            <Link to={`/benefits/${b.id}`} state={{ matchReason: b.matchReason }} className="card" key={b.id}>
+              <span className="badge">✓ Likely eligible</span>
+              <h2>{b.name}</h2>
+              <p>{b.eligibilitySummary}</p>
+            </Link>
+          ))}
+        </section>
       ))}
 
       <p className="disclaimer">
         These results are estimates based on the information you provided, not an
         official determination. Contact each program's agency to confirm your eligibility.
       </p>
+
+      <ChatPanel contextBenefits={results} />
     </main>
   )
 }

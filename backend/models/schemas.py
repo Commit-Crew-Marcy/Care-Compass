@@ -3,10 +3,15 @@
 Pydantic handles the mapping via alias generators, which is what the
 "the FastAPI layer maps between them" line in the spec refers to.
 """
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
+
+# The five answers a user can give on the immigration step. "prefer_not"
+# still returns every program without a status requirement, plus status-
+# dependent programs flagged with a "check with the agency" caveat.
+ImmigrationStatus = Literal["citizen", "green_card", "refugee_asylee", "visa", "prefer_not"]
 
 
 class CamelModel(BaseModel):
@@ -16,14 +21,22 @@ class CamelModel(BaseModel):
 
 
 class IntakeForm(CamelModel):
-    """Body of POST /api/eligibility/check. Matches the 5-step questionnaire."""
+    """Body of POST /api/eligibility/check. Matches the 6-step questionnaire."""
 
     age: int = Field(..., ge=0, le=130)
-    income: int = Field(..., ge=0)
+    income: int = Field(..., ge=0, le=10_000_000)
     state: str = Field(..., min_length=2, max_length=2)
     household_size: int = Field(default=1, ge=1)
     disability_status: bool = False
+    # Descriptive-only fields — accepted and stored but never read by rules.py
+    disability_details: List[str] = Field(default_factory=list)
+    disability_other_text: Optional[str] = None
     veteran_status: bool = False
+    is_pregnant: bool = False
+    has_children_under_18: bool = False
+    has_children_under_5: bool = False
+    immigration_status: ImmigrationStatus = "prefer_not"
+    years_in_us: Optional[int] = Field(default=None, ge=0, le=130)
     insurance_status: bool = False
     current_coverage: List[str] = Field(default_factory=list)
 
@@ -106,7 +119,14 @@ class ScreeningCreate(CamelModel):
     state: str = Field(..., min_length=2, max_length=2)
     household_size: int = Field(default=1, ge=1)
     disability_status: bool = False
+    disability_details: List[str] = Field(default_factory=list)
+    disability_other_text: Optional[str] = None
     veteran_status: bool = False
+    is_pregnant: bool = False
+    has_children_under_18: bool = False
+    has_children_under_5: bool = False
+    immigration_status: ImmigrationStatus = "prefer_not"
+    years_in_us: Optional[int] = Field(default=None, ge=0, le=130)
     insurance_status: bool = False
     current_coverage: List[str] = Field(default_factory=list)
     matched_benefits: List[dict] = Field(default_factory=list)
@@ -121,7 +141,14 @@ class ScreeningUpdate(CamelModel):
     state: Optional[str] = Field(default=None, min_length=2, max_length=2)
     household_size: Optional[int] = Field(default=None, ge=1)
     disability_status: Optional[bool] = None
+    disability_details: Optional[List[str]] = None
+    disability_other_text: Optional[str] = None
     veteran_status: Optional[bool] = None
+    is_pregnant: Optional[bool] = None
+    has_children_under_18: Optional[bool] = None
+    has_children_under_5: Optional[bool] = None
+    immigration_status: Optional[ImmigrationStatus] = None
+    years_in_us: Optional[int] = Field(default=None, ge=0, le=130)
     insurance_status: Optional[bool] = None
     current_coverage: Optional[List[str]] = None
 
@@ -134,7 +161,14 @@ class ScreeningOut(CamelModel):
     state: str
     household_size: int
     disability_status: bool
+    disability_details: List[str] = Field(default_factory=list)
+    disability_other_text: Optional[str] = None
     veteran_status: bool
+    is_pregnant: bool
+    has_children_under_18: bool
+    has_children_under_5: bool
+    immigration_status: str
+    years_in_us: Optional[int] = None
     insurance_status: bool
     current_coverage: List[str]
     matched_benefits: List[dict]
