@@ -42,6 +42,15 @@ class EligibilityRule(Base):
     requires_veteran = Column(Boolean, nullable=False, default=False)
     state = Column(String, nullable=True)  # two-letter code, NULL = nationwide
     requires_coverage = Column(String, nullable=True)  # e.g. "medicare", NULL = none
+    # Immigration eligibility for this qualifying path:
+    #   "none"             open to everyone regardless of status
+    #   "lawfully_present" citizens, green card holders, refugees/asylees, visa holders
+    #   "five_year_bar"    citizens and refugees/asylees immediately; green card
+    #                      holders only after 5 years in the US
+    immigration_rule = Column(String, nullable=False, default="none")
+    requires_pregnant = Column(Boolean, nullable=False, default=False)
+    requires_children_under_18 = Column(Boolean, nullable=False, default=False)
+    requires_children_under_5 = Column(Boolean, nullable=False, default=False)
 
     benefit = relationship("Benefit", back_populates="rules")
 
@@ -85,9 +94,18 @@ class Screening(Base):
     state = Column(String, nullable=False)
     household_size = Column(Integer, nullable=False, default=1)
     disability_status = Column(Boolean, nullable=False, default=False)
+    disability_details = Column(Text, nullable=True, default="[]")   # JSON list, descriptive only
+    disability_other_text = Column(String, nullable=True, default=None)
     veteran_status = Column(Boolean, nullable=False, default=False)
+    is_pregnant = Column(Boolean, nullable=False, default=False)
+    has_children_under_18 = Column(Boolean, nullable=False, default=False)
+    has_children_under_5 = Column(Boolean, nullable=False, default=False)
+    immigration_status = Column(String, nullable=False, default="prefer_not")
+    years_in_us = Column(Integer, nullable=True)
     insurance_status = Column(Boolean, nullable=False, default=False)
     current_coverage = Column(Text, nullable=False, default="[]")  # JSON list
     matched_benefits = Column(Text, nullable=False, default="[]")  # JSON list
 
     user = relationship("User", back_populates="screenings")
+
+

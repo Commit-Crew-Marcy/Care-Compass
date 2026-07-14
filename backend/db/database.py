@@ -9,7 +9,10 @@ import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./carecompass.db")
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./carecompass_v3.db")
+# v3 filename: added disability_details and disability_other_text columns to
+# screenings. SQLite's create_all cannot ALTER existing tables, so a fresh
+# filename gives local and Render deployments a clean, correctly-shaped DB.
 
 # check_same_thread is only needed for SQLite
 connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}

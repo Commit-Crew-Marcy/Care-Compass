@@ -46,8 +46,7 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
 @router.post("/logout", response_model=Message, response_model_by_alias=True)
 def logout(user: User = Depends(get_current_user)):
     """JWTs are stateless: logging out means the client deletes its token.
-    The endpoint exists so the frontend has an explicit logout action and
-    so the assignment's register/login/logout requirement is fully met."""
+    The endpoint exists so the frontend has an explicit logout action."""
     return {"message": "Logged out. Discard your token on the client."}
 
 

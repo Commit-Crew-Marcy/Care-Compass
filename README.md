@@ -1,26 +1,37 @@
 # CareCompass
 
-An AI-powered healthcare benefits navigator that helps older adults, people
-with disabilities, and low-income individuals discover healthcare programs
-they may qualify for.
+An AI-powered benefits navigator that helps people of every age, including
+older adults, families with children, people with disabilities, low-income
+individuals, and immigrants new to the United States, discover the government
+programs they may qualify for.
 
 Team Commit Crew — Zoulkarnein (Project Lead), Ashar (Scrum Master), Ibrahima (Tech Lead)
 
 ## How it works
 
-1. The user completes a 5-step questionnaire (age, income, state, household
-   size, disability/veteran status, current insurance).
+1. The user completes a 6-step questionnaire (age, income, state, household
+   size, disability/veteran status, pregnancy and children, immigration
+   status with a "prefer not to say" option, current insurance).
 2. The FastAPI backend runs the answers through a rules-based eligibility
-   engine (`backend/engine/rules.py`) against programs stored in the database.
-3. The React frontend shows matched programs as cards, each opening a detail
-   page with a plain-language description, why the user may qualify, required
-   documents, and the official application link.
+   engine (`backend/engine/rules.py`) against 18 programs stored in the
+   database: Medicare Parts A, B, C, and D, Medigap, Extra Help, Medicare
+   Savings Program, Medicaid, Emergency Medicaid, CHIP, the ACA
+   Marketplace, SNAP, WIC, TANF, SSI, LIHEAP, school meals, and Head Start.
+   The engine understands the federal 5-year waiting period for green card
+   holders, the refugee/asylee exemption, and programs open to everyone
+   regardless of status (WIC, Emergency Medicaid, school meals, Head Start).
+3. The React frontend shows matched programs grouped by category, each
+   opening a detail page with a plain-language description, why the user may
+   qualify, required documents, and the official application link.
 4. Users can create an account (register/login/logout with bcrypt-hashed
    passwords and JWT tokens) and save their screenings — a user-generated
    resource with full CRUD (create, read, update/rename, delete). Updating
    a screening's answers automatically re-runs the eligibility engine.
-5. (Stretch) An AI assistant explains benefits in plain language via the
-   Anthropic API — the Python engine decides eligibility, Claude only explains.
+5. An AI assistant (floating "Ask a question" panel on results and detail
+   pages) explains benefits in plain language in any language via the
+   Anthropic API — the Python engine decides eligibility, Claude only
+   explains. Requires ANTHROPIC_API_KEY on the server; the panel degrades
+   gracefully when the key is not set.
 
 ## Project structure
 
@@ -138,7 +149,7 @@ curl -X POST http://localhost:8000/api/eligibility/check \
 - [x] User authentication: register, login, logout, profile (GET /api/auth/me)
 - [x] User-generated resource with full CRUD: saved screenings
 - [x] GitHub repo with README containing the product spec
-- [x] Deployment link: https://care-compass-three.vercel.app
+- [ ] Deployment link (add after deploying): YOUR_LINK_HERE
 
 ## Notes
 

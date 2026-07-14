@@ -33,7 +33,14 @@ def to_out(s: Screening) -> dict:
         "state": s.state,
         "household_size": s.household_size,
         "disability_status": s.disability_status,
+        "disability_details": json.loads(s.disability_details or "[]"),
+        "disability_other_text": s.disability_other_text,
         "veteran_status": s.veteran_status,
+        "is_pregnant": s.is_pregnant,
+        "has_children_under_18": s.has_children_under_18,
+        "has_children_under_5": s.has_children_under_5,
+        "immigration_status": s.immigration_status,
+        "years_in_us": s.years_in_us,
         "insurance_status": s.insurance_status,
         "current_coverage": json.loads(s.current_coverage or "[]"),
         "matched_benefits": json.loads(s.matched_benefits or "[]"),
@@ -62,7 +69,14 @@ def create_screening(
         state=body.state.upper(),
         household_size=body.household_size,
         disability_status=body.disability_status,
+        disability_details=json.dumps(body.disability_details),
+        disability_other_text=body.disability_other_text,
         veteran_status=body.veteran_status,
+        is_pregnant=body.is_pregnant,
+        has_children_under_18=body.has_children_under_18,
+        has_children_under_5=body.has_children_under_5,
+        immigration_status=body.immigration_status,
+        years_in_us=body.years_in_us,
         insurance_status=body.insurance_status,
         current_coverage=json.dumps(body.current_coverage),
         matched_benefits=json.dumps(body.matched_benefits),
@@ -103,6 +117,12 @@ def update_screening(
         if field == "current_coverage":
             s.current_coverage = json.dumps(value)
             answers_changed = True
+        elif field == "disability_details":
+            # Descriptive only — store as JSON but do NOT re-run eligibility matching
+            s.disability_details = json.dumps(value)
+        elif field == "disability_other_text":
+            # Descriptive only — store as plain text, no re-matching needed
+            s.disability_other_text = value
         elif field == "state":
             s.state = value.upper()
             answers_changed = True
@@ -122,6 +142,11 @@ def update_screening(
             household_size=s.household_size,
             disability_status=s.disability_status,
             veteran_status=s.veteran_status,
+            is_pregnant=s.is_pregnant,
+            has_children_under_18=s.has_children_under_18,
+            has_children_under_5=s.has_children_under_5,
+            immigration_status=s.immigration_status,
+            years_in_us=s.years_in_us,
             insurance_status=s.insurance_status,
             current_coverage=json.loads(s.current_coverage or "[]"),
         )
