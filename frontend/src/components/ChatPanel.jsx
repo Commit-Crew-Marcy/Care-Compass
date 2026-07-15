@@ -45,7 +45,8 @@ export default function ChatPanel({ contextBenefits = [] }) {
   if (!open) {
     return (
       <button className="chat-fab" onClick={() => setOpen(true)} aria-label="Ask a question">
-        Ask a question
+        <span aria-hidden="true">💬</span>
+        <span className="chat-fab-label">Ask a question</span>
       </button>
     )
   }

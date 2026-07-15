@@ -67,3 +67,35 @@ def test_missing_required_field_returns_422(client):
     incomplete = {k: v for k, v in REPORTED_PAYLOAD.items() if k != "state"}
     r = client.post("/api/eligibility/check", json=incomplete)
     assert r.status_code == 422
+
+
+# ---- age validation (the person completing the form must be an adult) ----
+
+def test_age_18_is_accepted(client):
+    r = client.post("/api/eligibility/check", json={**REPORTED_PAYLOAD, "age": 18})
+    assert r.status_code == 200
+
+
+def test_age_67_is_accepted(client):
+    r = client.post("/api/eligibility/check", json={**REPORTED_PAYLOAD, "age": 67})
+    assert r.status_code == 200
+
+
+def test_age_17_is_rejected(client):
+    r = client.post("/api/eligibility/check", json={**REPORTED_PAYLOAD, "age": 17})
+    assert r.status_code == 422
+
+
+def test_age_0_is_rejected(client):
+    r = client.post("/api/eligibility/check", json={**REPORTED_PAYLOAD, "age": 0})
+    assert r.status_code == 422
+
+
+def test_age_121_is_rejected(client):
+    r = client.post("/api/eligibility/check", json={**REPORTED_PAYLOAD, "age": 121})
+    assert r.status_code == 422
+
+
+def test_decimal_age_is_rejected(client):
+    r = client.post("/api/eligibility/check", json={**REPORTED_PAYLOAD, "age": 45.5})
+    assert r.status_code == 422

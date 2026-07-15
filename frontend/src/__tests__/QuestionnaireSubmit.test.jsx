@@ -52,7 +52,7 @@ async function fillThroughStep5AndReachReview(user, { withDescriptions } = {}) {
     await user.click(screen.getByRole('radio', { name: /yes, i have insurance/i }))
     await user.click(screen.getByRole('checkbox', { name: /other coverage/i }))
     await user.type(
-      screen.getByLabelText(/tell us anything else about your health coverage/i),
+      screen.getByLabelText(/describe your other health coverage/i),
       'Covered through my spouse'
     )
   } else {
@@ -83,14 +83,19 @@ describe('Questionnaire submit payload', () => {
 
     expect(Object.keys(payload).sort()).toEqual([...ALLOWED_FIELDS].sort())
     expect(payload).not.toHaveProperty('disabilityOtherText')
+    expect(payload).not.toHaveProperty('otherCoverageText')
     expect(payload).not.toHaveProperty('insuranceOtherText')
     expect(payload).not.toHaveProperty('disabilityDescription')
     expect(payload).not.toHaveProperty('otherCoverageDescription')
+    expect(payload).not.toHaveProperty('insuranceDescription')
 
     expect(payload.age).toBe(67)
     expect(payload.income).toBe(68888)
     expect(payload.householdSize).toBe(1)
     expect(payload.state).toBe('CT')
+    // "other" is a frontend-only bucket for the description — the rules
+    // engine doesn't recognize it, so it must never reach the API.
+    expect(payload.currentCoverage).toEqual([])
   })
 
   it('sends currentCoverage as [] when insuranceStatus is false', async () => {

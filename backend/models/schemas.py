@@ -23,7 +23,11 @@ class CamelModel(BaseModel):
 class IntakeForm(CamelModel):
     """Body of POST /api/eligibility/check. Matches the 6-step questionnaire."""
 
-    age: int = Field(..., ge=0, le=130)
+    # The person completing the questionnaire must be an adult (18+). This
+    # does not limit which programs they can be matched to for their
+    # household — child-focused programs (CHIP, WIC, Head Start, school
+    # meals) key off hasChildrenUnder18/hasChildrenUnder5, not this field.
+    age: int = Field(..., ge=18, le=120)
     income: int = Field(..., ge=0, le=10_000_000)
     state: str = Field(..., min_length=2, max_length=2)
     household_size: int = Field(default=1, ge=1)

@@ -31,49 +31,53 @@ export default function Login() {
       <h1>Log in</h1>
       <p className="subtitle">Welcome back. Log in to see your saved screenings.</p>
 
-      {error && <div className="error-box" role="alert">{error}</div>}
+      <div className="auth-card">
+        <span className="brand-mark brand-mark--lg" aria-hidden="true" />
 
-      <form onSubmit={submit} noValidate>
-        <div className="field-group">
-          <label htmlFor="login-email">Email</label>
-          <input
-            id="login-email"
-            type="email"
-            required
-            autoComplete="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-        </div>
+        {error && <div className="error-box" role="alert">{error}</div>}
 
-        <div className="field-group">
-          <label htmlFor="login-password">Password</label>
-          <div className="password-input-wrapper">
+        <form onSubmit={submit} noValidate>
+          <div className="field-group">
+            <label htmlFor="login-email">Email</label>
             <input
-              id="login-password"
-              type={showPassword ? 'text' : 'password'}
+              id="login-email"
+              type="email"
               required
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="password-input"
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
             />
-            <button
-              type="button"
-              className="password-toggle"
-              aria-pressed={showPassword}
-              aria-label={showPassword ? 'Hide password' : 'Show password'}
-              onClick={() => setShowPassword((v) => !v)}
-            >
-              {showPassword ? 'Hide' : 'Show'}
-            </button>
           </div>
-        </div>
 
-        <button className="btn btn-primary" type="submit" disabled={loading}>
-          {loading ? 'Logging in...' : 'Log in'}
-        </button>
-      </form>
+          <div className="field-group">
+            <label htmlFor="login-password">Password</label>
+            <div className="password-input-wrapper">
+              <input
+                id="login-password"
+                type={showPassword ? 'text' : 'password'}
+                required
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="password-input"
+              />
+              <button
+                type="button"
+                className="password-toggle"
+                aria-pressed={showPassword}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                onClick={() => setShowPassword((v) => !v)}
+              >
+                {showPassword ? 'Hide' : 'Show'}
+              </button>
+            </div>
+          </div>
+
+          <button className="btn btn-primary" type="submit" disabled={loading}>
+            {loading ? 'Logging in...' : 'Log in'}
+          </button>
+        </form>
+      </div>
 
       <p className="disclaimer">
         No account yet? <Link to="/register">Create one here</Link>.

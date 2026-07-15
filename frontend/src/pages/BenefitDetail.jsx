@@ -29,6 +29,7 @@ export default function BenefitDetail() {
       <Link className="back-link" to="/results">← Back to results</Link>
       <h1>{benefit.name}</h1>
       <span className="badge">✓ Likely eligible</span>
+      <span className="badge badge--estimate">Estimate, not final</span>
 
       <div className="detail-section">
         <h3>What is this program?</h3>

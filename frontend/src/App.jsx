@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { Link, Route, Routes, useNavigate } from 'react-router-dom'
+import { Link, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { getToken, getUser, logout } from './api'
+import { goToHowItWorks } from './navigation'
 import BenefitDetail from './pages/BenefitDetail'
 import Home from './pages/Home'
 import Login from './pages/Login'
@@ -11,6 +12,7 @@ import Results from './pages/Results'
 
 export default function App() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
   const loggedIn = Boolean(getToken())
   const user = getUser()
@@ -28,7 +30,10 @@ export default function App() {
     <>
       <header className="nav">
         <div className="nav-inner">
-          <Link to="/" className="nav-brand" onClick={closeMenu}>CareCompass</Link>
+          <Link to="/" className="nav-brand" onClick={closeMenu}>
+            <span className="brand-mark" aria-hidden="true" />
+            CareCompass
+          </Link>
 
           <button
             className="nav-menu-btn"
@@ -41,7 +46,16 @@ export default function App() {
           </button>
 
           <nav id="nav-links" className={`nav-links${menuOpen ? ' nav-links--open' : ''}`}>
-            <Link to="/questionnaire" className="nav-find-btn" onClick={closeMenu}>Find Benefits</Link>
+            <button
+              type="button"
+              className="nav-text-btn"
+              onClick={() => {
+                goToHowItWorks(navigate, location.pathname)
+                closeMenu()
+              }}
+            >
+              How It Works
+            </button>
             {loggedIn ? (
               <>
                 <Link to="/screenings" onClick={closeMenu}>My screenings</Link>

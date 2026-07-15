@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { checkEligibility } from '../api'
+import { saveLatestScreening } from '../resultsStorage'
 import { validateAge, validateIncome } from '../validation'
 
 // How long to wait before showing the "server may be waking up" notice —
@@ -114,6 +115,7 @@ export default function Questionnaire() {
   const [incomeError, setIncomeError] = useState('')
   const [loading, setLoading] = useState(false)
   const [waking, setWaking] = useState(false)
+  const [childUnder5Error, setChildUnder5Error] = useState('')
   const [form, setForm] = useState({
     age: '',
     state: '',
@@ -125,12 +127,14 @@ export default function Questionnaire() {
     veteranStatus: false,
     isPregnant: false,
     hasChildrenUnder18: false,
+    // false = no/not applicable; becomes null (unanswered) while
+    // hasChildrenUnder18 is checked, until the user picks Yes or No
     hasChildrenUnder5: false,
     immigrationStatus: 'prefer_not',
     yearsInUs: '',
     insuranceStatus: false,
     currentCoverage: [],
-    insuranceOtherText: '',
+    otherCoverageText: '',
   })
 
   const set = (field, value) => setForm((f) => ({ ...f, [field]: value }))
@@ -149,12 +153,17 @@ export default function Questionnaire() {
     })
 
   const toggleCoverage = (key) =>
-    setForm((f) => ({
-      ...f,
-      currentCoverage: f.currentCoverage.includes(key)
-        ? f.currentCoverage.filter((c) => c !== key)
-        : [...f.currentCoverage, key],
-    }))
+    setForm((f) => {
+      const wasSelected = f.currentCoverage.includes(key)
+      return {
+        ...f,
+        currentCoverage: wasSelected
+          ? f.currentCoverage.filter((c) => c !== key)
+          : [...f.currentCoverage, key],
+        // Unchecking "Other coverage" hides its description — clear it too
+        otherCoverageText: key === 'other' && wasSelected ? '' : f.otherCoverageText,
+      }
+    })
 
   // Simple per-step validation so users can't continue with missing answers
   const stepValid = () => {
@@ -198,7 +207,12 @@ export default function Questionnaire() {
         setError('Please answer the disability question before continuing.')
         return
       }
+      if (form.hasChildrenUnder18 && form.hasChildrenUnder5 === null) {
+        setChildUnder5Error('Select whether any child in your household is under age 5.')
+        return
+      }
       setError('')
+      setChildUnder5Error('')
       setStep((s) => Math.min(s + 1, TOTAL_STEPS))
       return
     }
@@ -232,15 +246,18 @@ export default function Questionnaire() {
         veteranStatus: form.veteranStatus,
         isPregnant: form.isPregnant,
         hasChildrenUnder18: form.hasChildrenUnder18,
-        hasChildrenUnder5: form.hasChildrenUnder5,
+        hasChildrenUnder5: form.hasChildrenUnder18 ? form.hasChildrenUnder5 === true : false,
         immigrationStatus: form.immigrationStatus,
         yearsInUs: form.immigrationStatus === 'green_card' && form.yearsInUs !== ''
           ? Number(form.yearsInUs)
           : null,
         insuranceStatus: form.insuranceStatus,
-        currentCoverage: form.currentCoverage,
+        // "other" is a frontend-only bucket for the optional description;
+        // the rules engine doesn't recognize it as a coverage type.
+        currentCoverage: form.currentCoverage.filter((c) => c !== 'other'),
       }
       const results = await checkEligibility(intake)
+      saveLatestScreening(results, intake)
       navigate('/results', { state: { results, intake } })
     } catch (err) {
       if (import.meta.env.DEV) {
@@ -287,9 +304,11 @@ export default function Questionnaire() {
               <input
                 id="age"
                 type="number"
-                min="0"
+                min="18"
                 max="120"
+                step="1"
                 inputMode="numeric"
+                autoComplete="off"
                 placeholder="Enter your age"
                 value={form.age}
                 aria-invalid={ageError ? 'true' : 'false'}
@@ -301,7 +320,10 @@ export default function Questionnaire() {
               />
               {ageError
                 ? <p id="age-error" className="field-error" role="alert">{ageError}</p>
-                : <p id="age-hint" className="field-hint">Enter your age in years.</p>
+                : <p id="age-hint" className="field-hint">
+                    You must be 18 or older to complete this questionnaire. You can still
+                    include children in your household.
+                  </p>
               }
             </div>
             <div className="field-group">
@@ -476,17 +498,53 @@ export default function Questionnaire() {
           <label className={`check-card ${form.hasChildrenUnder18 ? 'selected' : ''}`}>
             <input type="checkbox" checked={form.hasChildrenUnder18}
               onChange={(e) => {
-                set('hasChildrenUnder18', e.target.checked)
-                if (!e.target.checked) set('hasChildrenUnder5', false)
+                const checked = e.target.checked
+                setForm((f) => ({
+                  ...f,
+                  hasChildrenUnder18: checked,
+                  // Checking reopens the question (must re-answer); unchecking
+                  // clears it to the concrete "false" the backend expects.
+                  hasChildrenUnder5: checked ? null : false,
+                }))
+                if (!checked) setChildUnder5Error('')
               }} />
             I have children under 18
           </label>
+
           {form.hasChildrenUnder18 && (
-            <label className={`check-card ${form.hasChildrenUnder5 ? 'selected' : ''}`}>
-              <input type="checkbox" checked={form.hasChildrenUnder5}
-                onChange={(e) => set('hasChildrenUnder5', e.target.checked)} />
-              At least one child is under 5
-            </label>
+            <fieldset className="ds-detail-fieldset">
+              <legend className="ds-detail-legend">
+                Is any child in your household under age 5?
+              </legend>
+              <p id="under5-hint" className="field-hint">
+                This helps us check programs for infants and young children.
+              </p>
+              <div className="ds-radio-group">
+                <label className={`check-card ${form.hasChildrenUnder5 === true ? 'selected' : ''}`}>
+                  <input
+                    type="radio"
+                    name="hasChildrenUnder5"
+                    checked={form.hasChildrenUnder5 === true}
+                    aria-describedby={childUnder5Error ? 'under5-error' : 'under5-hint'}
+                    onChange={() => { set('hasChildrenUnder5', true); setChildUnder5Error('') }}
+                  />
+                  Yes
+                </label>
+                <label className={`check-card ${form.hasChildrenUnder5 === false ? 'selected' : ''}`}>
+                  <input
+                    type="radio"
+                    name="hasChildrenUnder5"
+                    checked={form.hasChildrenUnder5 === false}
+                    aria-describedby={childUnder5Error ? 'under5-error' : 'under5-hint'}
+                    onChange={() => { set('hasChildrenUnder5', false); setChildUnder5Error('') }}
+                  />
+                  No
+                </label>
+              </div>
+              {childUnder5Error && (
+                <p id="under5-error" className="field-error" role="alert">{childUnder5Error}</p>
+              )}
+            </fieldset>
           )}
         </>
       )}
@@ -539,7 +597,7 @@ export default function Questionnaire() {
                   ...f,
                   insuranceStatus: false,
                   currentCoverage: [],
-                  insuranceOtherText: '',
+                  otherCoverageText: '',
                 }))
               } />
             No, I do not have insurance
@@ -549,42 +607,49 @@ export default function Questionnaire() {
             <>
               <label style={{ marginTop: 16 }}>Select all insurance you currently have</label>
               <div className="chip-grid">
-                {COVERAGE_OPTIONS.map((opt) => (
-                  <label key={opt.key}
-                    className={`check-card ${form.currentCoverage.includes(opt.key) ? 'selected' : ''}`}
-                    style={{ marginBottom: 0 }}>
-                    <input type="checkbox" checked={form.currentCoverage.includes(opt.key)}
-                      onChange={() => toggleCoverage(opt.key)} />
-                    {opt.label}
-                  </label>
-                ))}
+                {COVERAGE_OPTIONS.map((opt) => {
+                  const isOther = opt.key === 'other'
+                  const isChecked = form.currentCoverage.includes(opt.key)
+                  return (
+                    <label key={opt.key}
+                      className={`check-card ${isChecked ? 'selected' : ''}`}
+                      style={{ marginBottom: 0 }}
+                      {...(isOther ? { 'aria-expanded': isChecked, 'aria-controls': 'other-coverage-container' } : {})}>
+                      <input type="checkbox" checked={isChecked}
+                        onChange={() => toggleCoverage(opt.key)} />
+                      {opt.label}
+                    </label>
+                  )
+                })}
               </div>
               <p className="disclaimer">This helps us find supplemental programs you may still qualify for.</p>
 
-              <div className="field-group ds-other-group">
-                <label htmlFor="insurance-other">
-                  Tell us anything else about your health coverage (optional)
-                </label>
-                <p id="insurance-other-hint" className="field-hint">
-                  You can include the insurance company or type of plan. Do not enter a member ID,
-                  policy number, Social Security number, or other sensitive information.
-                </p>
-                <textarea
-                  id="insurance-other"
-                  maxLength={300}
-                  rows={4}
-                  placeholder="For example, coverage through my spouse, a student health plan, or another type of insurance"
-                  value={form.insuranceOtherText}
-                  aria-describedby="insurance-other-hint"
-                  onChange={(e) => set('insuranceOtherText', e.target.value)}
-                />
-                <p className="field-hint ds-char-count" aria-live="polite">
-                  {form.insuranceOtherText.length} / 300
-                </p>
-                <p className="ds-privacy-note">
-                  This description is for your review only and does not change your benefit matches.
-                </p>
-              </div>
+              {form.currentCoverage.includes('other') && (
+                <div id="other-coverage-container" className="field-group ds-other-group" aria-live="polite">
+                  <label htmlFor="other-coverage-text">
+                    Describe your other health coverage (optional)
+                  </label>
+                  <p id="other-coverage-hint" className="field-hint">
+                    Share the type of coverage if you know it. Do not enter a member ID, policy
+                    number, Social Security number, or other sensitive information.
+                  </p>
+                  <textarea
+                    id="other-coverage-text"
+                    maxLength={300}
+                    rows={4}
+                    placeholder="For example, student health insurance, coverage through a spouse, or another private plan"
+                    value={form.otherCoverageText}
+                    aria-describedby="other-coverage-hint"
+                    onChange={(e) => set('otherCoverageText', e.target.value)}
+                  />
+                  <p className="field-hint ds-char-count" aria-live="polite">
+                    {form.otherCoverageText.length} / 300
+                  </p>
+                  <p className="ds-privacy-note">
+                    This description is for your review only and does not change your benefit matches.
+                  </p>
+                </div>
+              )}
             </>
           )}
         </>
@@ -622,7 +687,9 @@ export default function Questionnaire() {
             <span>Children</span>
             <span>
               {form.hasChildrenUnder18
-                ? (form.hasChildrenUnder5 ? 'Under 18, incl. under 5' : 'Under 18')
+                ? (form.hasChildrenUnder5 === true
+                    ? 'Children under 18, including a child under 5'
+                    : 'Children under 18')
                 : 'None'}
             </span>
           </div>
@@ -639,10 +706,10 @@ export default function Questionnaire() {
             <span>Insurance</span>
             <span>{form.insuranceStatus ? (form.currentCoverage.join(', ') || 'Yes') : 'None'}</span>
           </div>
-          {form.insuranceStatus === true && form.insuranceOtherText && (
+          {form.insuranceStatus === true && form.currentCoverage.includes('other') && form.otherCoverageText && (
             <div className="review-row">
-              <span>Additional health coverage information</span>
-              <span>{form.insuranceOtherText}</span>
+              <span>Other health coverage</span>
+              <span>{form.otherCoverageText}</span>
             </div>
           )}
         </>

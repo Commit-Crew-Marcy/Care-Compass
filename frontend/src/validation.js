@@ -1,11 +1,17 @@
 // Pure validation helpers — no React deps so they can be unit-tested directly.
 
 export const INCOME_MAX = 10_000_000
+export const AGE_MIN = 18
+export const AGE_MAX = 120
 
+// The person completing CareCompass must be an adult; this does not limit
+// which household programs they can be matched to (see IntakeForm.age).
 export function validateAge(val) {
-  if (val === '') return 'Age is required.'
+  if (val === '') return 'Enter your age.'
   const n = Number(val)
-  if (!Number.isInteger(n) || n < 0 || n > 120) return 'Please enter a whole number from 0 to 120.'
+  if (!Number.isInteger(n)) return 'Enter your age as a whole number.'
+  if (n < AGE_MIN) return 'You must be 18 or older to use CareCompass.'
+  if (n > AGE_MAX) return 'Enter an age of 120 or younger.'
   return ''
 }
 

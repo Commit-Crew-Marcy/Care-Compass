@@ -1,12 +1,22 @@
-import { useNavigate } from 'react-router-dom'
+import { useEffect } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { goToHowItWorks, HOW_IT_WORKS_ID } from '../navigation'
 
 export default function Home() {
   const navigate = useNavigate()
+  const location = useLocation()
 
-  const scrollToHow = (e) => {
-    e.preventDefault()
-    document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' })
-  }
+  // Reached via the nav link (or any other route) with { scrollTo } state —
+  // scroll once this page has mounted, then clear the state so back/refresh
+  // doesn't re-trigger the scroll.
+  useEffect(() => {
+    if (location.state?.scrollTo === HOW_IT_WORKS_ID) {
+      document.getElementById(HOW_IT_WORKS_ID)?.scrollIntoView()
+      navigate(location.pathname, { replace: true, state: {} })
+    }
+  }, [location.state, location.pathname, navigate])
+
+  const handleHowItWorks = () => goToHowItWorks(navigate, location.pathname)
 
   return (
     <main>
@@ -31,13 +41,13 @@ export default function Home() {
               >
                 Find my benefits
               </button>
-              <a
-                href="#how-it-works"
+              <button
+                type="button"
                 className="btn btn-outline home-cta-btn"
-                onClick={scrollToHow}
+                onClick={handleHowItWorks}
               >
                 See how it works
-              </a>
+              </button>
             </div>
           </div>
 
@@ -106,15 +116,9 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ---- Bottom CTA ---- */}
+      {/* ---- Closing disclaimer ---- */}
       <section className="home-bottom-cta">
         <div className="page-wrap home-bottom-inner">
-          <button
-            className="btn btn-primary home-cta-btn"
-            onClick={() => navigate('/questionnaire')}
-          >
-            Start the questionnaire
-          </button>
           <p className="home-bottom-disclaimer">
             CareCompass provides general guidance and does not make final eligibility
             decisions. Government agencies determine official eligibility.
