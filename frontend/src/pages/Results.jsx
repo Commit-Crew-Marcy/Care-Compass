@@ -1,12 +1,17 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { createScreening, getToken } from '../api'
+import { clearLatestScreening, loadLatestScreening, saveLatestScreening } from '../resultsStorage'
 import ChatPanel from '../components/ChatPanel'
 
-// Results arrive via router state from the questionnaire. Matches are
-// grouped by category so a long list stays scannable, and the AI chat
-// panel floats on this page with the matches as context. Logged-in users
-// can SAVE the screening (the CREATE of the CRUD resource).
+// Results arrive via router state from the questionnaire, but state is lost
+// on refresh or when navigating in from elsewhere (e.g. back from a benefit
+// detail page opened in a new tab). Falling back to a localStorage cache of
+// the latest screening keeps results visible until the user starts a new
+// questionnaire. Matches are grouped by category so a long list stays
+// scannable, and the AI chat panel floats on this page with the matches as
+// context. Logged-in users can SAVE the screening (the CREATE of the CRUD
+// resource) — that save feature is unrelated to this navigation cache.
 
 const GROUPS = [
   {
@@ -43,12 +48,28 @@ function groupResults(results) {
 export default function Results() {
   const { state } = useLocation()
   const navigate = useNavigate()
-  const results = state?.results
-  const intake = state?.intake
+  const hasStateResults = Boolean(state?.results)
+  // Read the cache at most once per mount — location.state doesn't change
+  // across re-renders of the same page visit, so there's no need to re-read
+  // localStorage on every render (e.g. every keystroke in the save-name field).
+  const [cached] = useState(() => (hasStateResults ? null : loadLatestScreening()))
+  const results = hasStateResults ? state.results : cached?.results
+  const intake = hasStateResults ? state.intake : cached?.intake
   const [saveName, setSaveName] = useState('My screening')
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
   const loggedIn = Boolean(getToken())
+
+  // Arriving fresh from the questionnaire (state present) refreshes the
+  // cache so it reflects the newest screening.
+  useEffect(() => {
+    if (hasStateResults) saveLatestScreening(state.results, state.intake)
+  }, [hasStateResults, state])
+
+  const startNewQuestionnaire = () => {
+    clearLatestScreening()
+    navigate('/questionnaire')
+  }
 
   if (!results) {
     return (
@@ -78,6 +99,15 @@ export default function Results() {
       <p className="subtitle">
         {results.length} program{results.length === 1 ? '' : 's'} found based on your information
       </p>
+
+      <button
+        type="button"
+        className="btn btn-outline"
+        style={{ marginBottom: 24 }}
+        onClick={startNewQuestionnaire}
+      >
+        Start a new questionnaire
+      </button>
 
       {error && <div className="error-box">{error}</div>}
       {saved && (
