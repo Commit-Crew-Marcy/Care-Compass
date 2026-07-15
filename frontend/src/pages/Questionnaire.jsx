@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { checkEligibility } from '../api'
 import { saveLatestScreening } from '../resultsStorage'
+import { useSetPageContext } from '../pageContext'
 import { validateAge, validateIncome } from '../validation'
 
 // How long to wait before showing the "server may be waking up" notice —
@@ -107,6 +108,32 @@ const DISABILITY_DETAILS = [
 
 const TOTAL_STEPS = 6
 
+// Safe, structural-only descriptions of each step for the AI Guide — labels
+// only, never the values the user has entered.
+const STEP_HEADINGS = {
+  1: 'First, tell us your age and state',
+  2: 'Tell us about your household',
+  3: 'Tell us about you and your family',
+  4: 'Are you new to the United States?',
+  5: 'Do you currently have health insurance?',
+  6: 'Review your information',
+}
+
+const STEP_FIELD_CONTROLS = {
+  1: [
+    { id: 'age', type: 'input', label: 'Your age' },
+    { id: 'state', type: 'select', label: 'Your state' },
+  ],
+  2: [
+    { id: 'income', type: 'input', label: 'Annual household income' },
+    { id: 'household', type: 'input', label: 'How many people live in your household' },
+  ],
+  3: [{ id: 'step-heading', type: 'heading', label: 'Do you have a disability, long-term condition, or support need?' }],
+  4: [{ id: 'step-heading', type: 'heading', label: 'Are you new to the United States?' }],
+  5: [{ id: 'step-heading', type: 'heading', label: 'Do you currently have health insurance?' }],
+  6: [],
+}
+
 export default function Questionnaire() {
   const navigate = useNavigate()
   const [step, setStep] = useState(1)
@@ -138,6 +165,29 @@ export default function Questionnaire() {
   })
 
   const set = (field, value) => setForm((f) => ({ ...f, [field]: value }))
+
+  const validationMessages = [error, ageError, incomeError, childUnder5Error].filter(Boolean)
+
+  const navControls = [
+    ...(step > 1 ? [{ id: 'back-button', type: 'button', label: 'Back' }] : []),
+    ...(step < TOTAL_STEPS
+      ? [{ id: 'continue-button', type: 'button', label: 'Continue' }]
+      : [{ id: 'questionnaire-submit-button', type: 'button', label: 'Find my benefits' }]),
+  ]
+
+  const pageContext = useMemo(
+    () => ({
+      route: '/questionnaire',
+      pageTitle: 'CareCompass Questionnaire',
+      heading: STEP_HEADINGS[step] || '',
+      questionnaireStep: step,
+      visibleControls: [...(STEP_FIELD_CONTROLS[step] || []), ...navControls],
+      validationMessages,
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [step, error, ageError, incomeError, childUnder5Error]
+  )
+  useSetPageContext(pageContext)
 
   const toggleDisabilityDetail = (key) =>
     setForm((f) => {
@@ -295,7 +345,7 @@ export default function Questionnaire() {
             <p className="step1-trust">Free &bull; Private &bull; No account required</p>
           </div>
 
-          <h2 className="step1-question">First, tell us your age and state</h2>
+          <h2 id="step-heading" className="step1-question">First, tell us your age and state</h2>
           <p className="subtitle">We use this information to find programs available to you.</p>
 
           <div className="field-row">
@@ -342,7 +392,7 @@ export default function Questionnaire() {
 
       {step === 2 && (
         <>
-          <h1>Tell us about your household</h1>
+          <h1 id="step-heading">Tell us about your household</h1>
           <p className="subtitle">This helps us check your income against federal guidelines.</p>
 
           <div className="field-group">
@@ -382,7 +432,7 @@ export default function Questionnaire() {
 
       {step === 3 && (
         <>
-          <h1>Tell us about you and your family</h1>
+          <h1 id="step-heading">Tell us about you and your family</h1>
           <p className="subtitle">Select everything that applies. Each one unlocks different programs.</p>
 
           {/* ---- Disability yes / no ---- */}
@@ -551,7 +601,7 @@ export default function Questionnaire() {
 
       {step === 4 && (
         <>
-          <h1>Are you new to the United States?</h1>
+          <h1 id="step-heading">Are you new to the United States?</h1>
           <p className="subtitle">
             Some programs have immigration rules, and some are open to everyone.
             We only use this answer to match you with programs. We never share it,
@@ -583,7 +633,7 @@ export default function Questionnaire() {
 
       {step === 5 && (
         <>
-          <h1>Do you currently have health insurance?</h1>
+          <h1 id="step-heading">Do you currently have health insurance?</h1>
           <p className="subtitle">Even if you do, you may still qualify for additional programs.</p>
           <label className={`check-card ${form.insuranceStatus ? 'selected' : ''}`}>
             <input type="radio" name="ins" checked={form.insuranceStatus}
@@ -657,7 +707,7 @@ export default function Questionnaire() {
 
       {step === 6 && (
         <>
-          <h1>Review your information</h1>
+          <h1 id="step-heading">Review your information</h1>
           <p className="subtitle">Make sure everything looks right before we find your matches.</p>
           <div className="review-row"><span>Age</span><span>{form.age}</span></div>
           <div className="review-row"><span>State</span><span>{form.state}</span></div>
@@ -727,10 +777,10 @@ export default function Questionnaire() {
             </p>
           )}
           <div className="btn-row">
-            {step > 1 && <button className="btn btn-outline" onClick={back} disabled={loading}>Back</button>}
-            {step < TOTAL_STEPS && <button className="btn btn-primary" onClick={next}>Continue</button>}
+            {step > 1 && <button id="back-button" className="btn btn-outline" onClick={back} disabled={loading}>Back</button>}
+            {step < TOTAL_STEPS && <button id="continue-button" className="btn btn-primary" onClick={next}>Continue</button>}
             {step === TOTAL_STEPS && (
-              <button className="btn btn-primary" onClick={submit} disabled={loading}>
+              <button id="questionnaire-submit-button" className="btn btn-primary" onClick={submit} disabled={loading}>
                 {loading ? 'Connecting to CareCompass...' : 'Find my benefits'}
               </button>
             )}

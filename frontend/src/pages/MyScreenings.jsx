@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { deleteScreening, getToken, listScreenings, updateScreening } from '../api'
+import { useSetPageContext } from '../pageContext'
 
 // The saved-screenings dashboard: READ (list), UPDATE (rename), DELETE.
 // CREATE happens from the Results page after an eligibility check.
@@ -19,6 +20,20 @@ export default function MyScreenings() {
     }
     listScreenings().then(setScreenings).catch((e) => setError(e.message))
   }, [navigate])
+
+  const pageContext = useMemo(
+    () => ({
+      route: '/screenings',
+      pageTitle: 'CareCompass My Screenings',
+      heading: 'My saved screenings',
+      visibleControls:
+        screenings?.length > 0
+          ? [{ id: 'screenings-list', type: 'section', label: 'Your saved screenings' }]
+          : [{ id: 'start-a-screening-link', type: 'link', label: 'Start a screening' }],
+    }),
+    [screenings]
+  )
+  useSetPageContext(pageContext)
 
   const startRename = (s) => {
     setRenamingId(s.id)
@@ -59,10 +74,11 @@ export default function MyScreenings() {
         <div className="card">
           <h2>Nothing saved yet</h2>
           <p>Run the questionnaire and press "Save my results" to keep a screening here.</p>
-          <Link className="btn btn-primary" to="/" style={{ marginTop: 14 }}>Start a screening</Link>
+          <Link id="start-a-screening-link" className="btn btn-primary" to="/" style={{ marginTop: 14 }}>Start a screening</Link>
         </div>
       )}
 
+      <div id="screenings-list">
       {screenings?.map((s) => (
         <div className="card" key={s.id}>
           {renamingId === s.id ? (
@@ -93,6 +109,7 @@ export default function MyScreenings() {
           )}
         </div>
       ))}
+      </div>
     </main>
   )
 }

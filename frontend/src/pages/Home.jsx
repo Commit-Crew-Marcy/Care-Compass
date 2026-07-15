@@ -1,10 +1,27 @@
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { goToHowItWorks, HOW_IT_WORKS_ID } from '../navigation'
+import { useSetPageContext } from '../pageContext'
 
 export default function Home() {
   const navigate = useNavigate()
   const location = useLocation()
+
+  const pageContext = useMemo(
+    () => ({
+      route: '/',
+      pageTitle: 'CareCompass',
+      heading: 'Find government benefits that may fit your situation',
+      sectionHeadings: ['How It Works', 'Clear rules, responsible AI'],
+      visibleControls: [
+        { id: 'find-my-benefits-button', type: 'button', label: 'Find my benefits' },
+        { id: 'see-how-it-works-button', type: 'button', label: 'See how it works' },
+      ],
+      visibleLinks: [],
+    }),
+    []
+  )
+  useSetPageContext(pageContext)
 
   // Reached via the nav link (or any other route) with { scrollTo } state —
   // scroll once this page has mounted, then clear the state so back/refresh
@@ -36,12 +53,14 @@ export default function Home() {
             </p>
             <div className="home-cta-row">
               <button
+                id="find-my-benefits-button"
                 className="btn btn-primary home-cta-btn"
                 onClick={() => navigate('/questionnaire')}
               >
                 Find my benefits
               </button>
               <button
+                id="see-how-it-works-button"
                 type="button"
                 className="btn btn-outline home-cta-btn"
                 onClick={handleHowItWorks}

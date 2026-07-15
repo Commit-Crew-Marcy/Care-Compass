@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { createScreening, getToken } from '../api'
 import { clearLatestScreening, loadLatestScreening, saveLatestScreening } from '../resultsStorage'
-import ChatPanel from '../components/ChatPanel'
+import { useSetPageContext } from '../pageContext'
 
 // Results arrive via router state from the questionnaire, but state is lost
 // on refresh or when navigating in from elsewhere (e.g. back from a benefit
@@ -71,12 +71,38 @@ export default function Results() {
     navigate('/questionnaire')
   }
 
+  const grouped = useMemo(() => (results ? groupResults(results) : []), [results])
+
+  // Safe page-context summary for the AI Guide — only names and short,
+  // already-public descriptions, never raw intake answers.
+  const pageContext = useMemo(
+    () => ({
+      route: '/results',
+      pageTitle: 'CareCompass Results',
+      heading: results ? 'Your matched benefits' : 'No results yet',
+      sectionHeadings: grouped.map((g) => g.title),
+      visibleControls: results
+        ? [{ id: 'start-new-questionnaire-button', type: 'button', label: 'Start a new questionnaire' }]
+        : [{ id: 'start-questionnaire-button', type: 'button', label: 'Start the questionnaire' }],
+      visibleLinks: results
+        ? results.slice(0, 10).map((b) => ({ id: `benefit-link-${b.id}`, label: b.name, route: `/benefits/${b.id}` }))
+        : [],
+      matchedBenefits: results
+        ? results.slice(0, 10).map((b) => ({ name: b.name, description: b.eligibilitySummary }))
+        : [],
+    }),
+    [results, grouped]
+  )
+  useSetPageContext(pageContext)
+
   if (!results) {
     return (
       <main className="container">
         <h1>No results yet</h1>
         <p className="subtitle">Answer the questionnaire first so we can find your benefits.</p>
-        <button className="btn btn-primary" onClick={() => navigate('/')}>Start the questionnaire</button>
+        <button id="start-questionnaire-button" className="btn btn-primary" onClick={() => navigate('/')}>
+          Start the questionnaire
+        </button>
       </main>
     )
   }
@@ -91,8 +117,6 @@ export default function Results() {
     }
   }
 
-  const grouped = groupResults(results)
-
   return (
     <main className="container">
       <h1>Your matched benefits</h1>
@@ -101,6 +125,7 @@ export default function Results() {
       </p>
 
       <button
+        id="start-new-questionnaire-button"
         type="button"
         className="btn btn-outline"
         style={{ marginBottom: 24 }}
@@ -145,7 +170,13 @@ export default function Results() {
         <section key={group.title}>
           <h2 className="group-title">{group.title}</h2>
           {group.items.map((b) => (
-            <Link to={`/benefits/${b.id}`} state={{ matchReason: b.matchReason }} className="card" key={b.id}>
+            <Link
+              id={`benefit-link-${b.id}`}
+              to={`/benefits/${b.id}`}
+              state={{ matchReason: b.matchReason }}
+              className="card"
+              key={b.id}
+            >
               <span className="badge">✓ Likely eligible</span>
               <h2>{b.name}</h2>
               <p>{b.eligibilitySummary}</p>
@@ -158,8 +189,6 @@ export default function Results() {
         These results are estimates based on the information you provided, not an
         official determination. Contact each program's agency to confirm your eligibility.
       </p>
-
-      <ChatPanel contextBenefits={results} />
     </main>
   )
 }

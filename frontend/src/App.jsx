@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { Link, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { getToken, getUser, logout } from './api'
 import { goToHowItWorks } from './navigation'
+import { PageContextProvider } from './pageContext'
+import ChatPanel from './components/ChatPanel'
 import BenefitDetail from './pages/BenefitDetail'
 import Home from './pages/Home'
 import Login from './pages/Login'
@@ -27,7 +29,7 @@ export default function App() {
   }
 
   return (
-    <>
+    <PageContextProvider>
       <header className="nav">
         <div className="nav-inner">
           <Link to="/" className="nav-brand" onClick={closeMenu}>
@@ -85,6 +87,8 @@ export default function App() {
         <Route path="/register" element={<Register />} />
         <Route path="/screenings" element={<MyScreenings />} />
       </Routes>
-    </>
+
+      <ChatPanel />
+    </PageContextProvider>
   )
 }
