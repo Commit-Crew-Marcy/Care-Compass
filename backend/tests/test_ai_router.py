@@ -9,14 +9,16 @@ import pytest
 from fastapi.testclient import TestClient
 
 from main import app
-from models.schemas import PageContext
+from models.schemas import ExtensionPageContext, PageContext
 from routers.ai import (
     ACTION_TOOL,
+    EXTENSION_ACTION_TOOL,
     UNAVAILABLE_MESSAGE,
     enforce_step_limit,
     enforce_word_limit,
     is_approved_route,
     validate_action,
+    validate_extension_action,
 )
 
 
@@ -200,3 +202,86 @@ def test_page_context_drops_fields_outside_the_approved_schema():
     assert "password" not in dumped
     assert "disability_other_text" not in dumped
     assert "disabilityOtherText" not in dumped
+
+
+# ---------- browser extension route ----------
+
+
+def extension_context(allowed_actions=None):
+    return ExtensionPageContext(
+        url="https://www.benefits.gov/help",
+        domain="www.benefits.gov",
+        page_title="Benefits help",
+        page_text="This page explains how to find help.",
+        interactive_elements=[
+            {
+                "id": "cc-element-1",
+                "role": "link",
+                "label": "Learn more",
+                "tag": "a",
+                "href": "https://www.benefits.gov/more",
+                "allowedActions": allowed_actions or ["scroll", "focus", "click"],
+            }
+        ],
+    )
+
+
+def test_extension_missing_api_key_returns_graceful_503(client, monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    response = client.post(
+        "/api/ai/extension/chat",
+        json={
+            "question": "Explain this page.",
+            "pageContext": extension_context().model_dump(by_alias=True),
+        },
+    )
+    assert response.status_code == 503
+    assert response.json()["detail"] == UNAVAILABLE_MESSAGE
+
+
+def test_extension_rejects_non_web_page_url(client, monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    context = extension_context().model_dump(by_alias=True)
+    context["url"] = "chrome://extensions"
+    response = client.post(
+        "/api/ai/extension/chat",
+        json={"question": "Explain this page.", "pageContext": context},
+    )
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Only regular web pages are supported."
+
+
+def test_extension_click_requires_captured_click_capability_and_confirmation():
+    context = extension_context()
+    action = validate_extension_action(
+        {"type": "click_element", "target": "cc-element-1"}, context
+    )
+    assert action is not None
+    assert action.requires_confirmation is True
+
+    no_click_context = extension_context(["scroll", "focus"])
+    assert validate_extension_action(
+        {"type": "click_element", "target": "cc-element-1"}, no_click_context
+    ) is None
+
+
+def test_extension_rejects_unknown_targets_and_unsupported_actions():
+    context = extension_context()
+    assert validate_extension_action(
+        {"type": "scroll_to_element", "target": "missing"}, context
+    ) is None
+    assert validate_extension_action(
+        {"type": "submit_form", "target": "cc-element-1"}, context
+    ) is None
+
+
+def test_extension_tool_schema_only_exposes_safe_navigation_actions():
+    enum_values = set(
+        EXTENSION_ACTION_TOOL["input_schema"]["properties"]["type"]["enum"]
+    )
+    assert enum_values == {
+        "scroll_to_element",
+        "focus_element",
+        "click_element",
+        "go_back",
+    }

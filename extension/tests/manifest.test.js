@@ -1,0 +1,13 @@
+const test = require('node:test')
+const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const path = require('node:path')
+
+test('manifest uses temporary active-tab access instead of every-site access', () => {
+  const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'manifest.json'), 'utf8'))
+  assert.equal(manifest.manifest_version, 3)
+  assert.ok(manifest.permissions.includes('activeTab'))
+  assert.ok(manifest.permissions.includes('scripting'))
+  assert.equal(manifest.host_permissions.includes('<all_urls>'), false)
+  assert.equal(manifest.action.default_popup, 'popup/popup.html')
+})

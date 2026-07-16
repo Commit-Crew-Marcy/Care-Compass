@@ -610,6 +610,61 @@ form button.btn { margin-top: 6px; }
 .save-banner .btn { margin-top: 10px; }
 .success-box { background: #EAF3DE; color: #27500A; border-radius: var(--radius-md); padding: 16px; margin-bottom: 18px; box-shadow: var(--shadow-sm); }
 
+/* Dismissible install suggestion on results/detail pages. It stays separate
+   from the page's benefit cards so users cannot mistake it for a match. */
+.extension-prompt {
+  position: fixed;
+  left: 20px;
+  bottom: 24px;
+  z-index: 35;
+  width: min(430px, calc(100vw - 40px));
+  padding: 20px;
+  border: 2px solid var(--gold);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(150deg, var(--white) 0%, var(--gold-tint) 100%);
+  box-shadow: var(--shadow-lg);
+}
+.extension-prompt-kicker {
+  margin: 0 34px 4px 0;
+  color: var(--gold-text);
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.extension-prompt h2 { margin: 0 34px 8px 0; color: var(--ink); font-size: 22px; }
+.extension-prompt > p:not(.extension-prompt-kicker) { margin: 0; color: var(--navy); font-size: 17px; line-height: 1.5; }
+.extension-prompt-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--navy);
+  font-size: 30px;
+  line-height: 1;
+  cursor: pointer;
+}
+.extension-prompt-close:hover { border-color: var(--mid); background: var(--white); }
+.extension-prompt-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+.extension-prompt-actions .btn { width: auto; min-height: 48px; margin: 0; }
+
+@media (max-width: 600px) {
+  .extension-prompt {
+    left: 12px;
+    bottom: 156px;
+    width: calc(100vw - 24px);
+    padding: 18px;
+  }
+  .extension-prompt-actions .btn { flex: 1 1 160px; }
+}
+
 /* ---- results category groups ---- */
 /* A vertical gradient "kicker" bar instead of a horizontal hairline underline —
    reads as a section tag, not a decorative divider. */

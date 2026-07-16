@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { createScreening, getToken } from '../api'
+import ExtensionPrompt from '../components/ExtensionPrompt'
 import { clearLatestScreening, loadLatestScreening, saveLatestScreening } from '../resultsStorage'
 import { useSetPageContext } from '../pageContext'
 
@@ -123,6 +124,8 @@ export default function Results() {
       <p className="subtitle">
         {results.length} program{results.length === 1 ? '' : 's'} found based on your information
       </p>
+
+      {results.length > 0 && <ExtensionPrompt />}
 
       <button
         id="start-new-questionnaire-button"

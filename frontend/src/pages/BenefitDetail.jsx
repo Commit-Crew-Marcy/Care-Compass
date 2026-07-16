@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router-dom'
 import { getBenefit } from '../api'
+import ExtensionPrompt from '../components/ExtensionPrompt'
 import { useSetPageContext } from '../pageContext'
 
 export default function BenefitDetail() {
@@ -72,10 +73,13 @@ export default function BenefitDetail() {
       </div>
 
       {benefit.applyUrl && (
-        <a id="apply-official-site-link" className="btn btn-primary" href={benefit.applyUrl} target="_blank" rel="noreferrer"
-          style={{ marginTop: 24 }}>
-          Apply on the official site ↗
-        </a>
+        <>
+          <ExtensionPrompt />
+          <a id="apply-official-site-link" className="btn btn-primary" href={benefit.applyUrl} target="_blank" rel="noreferrer"
+            style={{ marginTop: 24 }}>
+            Apply on the official site ↗
+          </a>
+        </>
       )}
 
       <p className="disclaimer">

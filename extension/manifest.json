@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "CareCompass Browser Guide",
+  "version": "0.1.0",
+  "description": "Explains benefits websites in plain language and helps you find safe next steps.",
+  "minimum_chrome_version": "88",
+  "action": {
+    "default_title": "Open CareCompass Browser Guide",
+    "default_popup": "popup/popup.html"
+  },
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage"
+  ],
+  "host_permissions": [
+    "http://localhost:8000/*",
+    "https://care-compass-4gi5.onrender.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://localhost:5173/*",
+        "http://127.0.0.1:5173/*",
+        "http://localhost:5174/*",
+        "http://127.0.0.1:5174/*",
+        "http://localhost:5175/*",
+        "http://127.0.0.1:5175/*",
+        "https://care-compass-three.vercel.app/*"
+      ],
+      "js": ["shared.js", "content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

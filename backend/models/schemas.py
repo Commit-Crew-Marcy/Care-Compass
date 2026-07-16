@@ -162,6 +162,63 @@ class ChatResponse(CamelModel):
     action: Optional[ChatAction] = None
 
 
+ExtensionElementAction = Literal["scroll", "focus", "click"]
+ExtensionActionType = Literal[
+    "scroll_to_element",
+    "focus_element",
+    "click_element",
+    "go_back",
+]
+
+
+class ExtensionInteractiveElement(CamelModel):
+    """A visible page control captured by the browser extension.
+
+    The extension creates opaque, short-lived ids and decides which actions
+    each element supports. Input values are never included.
+    """
+
+    id: str = Field(..., min_length=1, max_length=80)
+    role: str = Field(default="control", max_length=40)
+    label: str = Field(..., min_length=1, max_length=240)
+    tag: str = Field(default="", max_length=30)
+    input_type: str = Field(default="", max_length=30)
+    in_form: bool = False
+    href: Optional[str] = Field(default=None, max_length=2048)
+    allowed_actions: List[ExtensionElementAction] = Field(default_factory=list, max_length=3)
+
+
+class ExtensionPageContext(CamelModel):
+    """Filtered visible-page context supplied by the Chrome extension."""
+
+    url: str = Field(..., min_length=8, max_length=2048)
+    domain: str = Field(default="", max_length=255)
+    page_title: str = Field(default="", max_length=300)
+    heading: str = Field(default="", max_length=300)
+    section_headings: List[str] = Field(default_factory=list, max_length=24)
+    page_text: str = Field(default="", max_length=12_000)
+    selected_text: str = Field(default="", max_length=2_000)
+    interactive_elements: List[ExtensionInteractiveElement] = Field(default_factory=list, max_length=60)
+
+
+class ExtensionChatAction(CamelModel):
+    type: ExtensionActionType
+    target: Optional[str] = None
+    requires_confirmation: bool = False
+
+
+class ExtensionChatRequest(CamelModel):
+    question: str = Field(..., min_length=1, max_length=2000)
+    page_context: ExtensionPageContext
+    response_mode: ResponseMode = "simple"
+    history: List[ChatHistoryTurn] = Field(default_factory=list, max_length=6)
+
+
+class ExtensionChatResponse(CamelModel):
+    message: str
+    action: Optional[ExtensionChatAction] = None
+
+
 class Message(CamelModel):
     message: str
 
