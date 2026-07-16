@@ -9,9 +9,11 @@ Team Commit Crew — Zoulkarnein (Project Lead), Ashar (Scrum Master), Ibrahima 
 
 ## How it works
 
-1. The user completes a 6-step questionnaire (age, income, state, household
+1. The user completes a 7-step questionnaire (age, income, state and NYC
+   residency, household
    size, disability/veteran status, pregnancy and children, immigration
-   status with a "prefer not to say" option, current insurance).
+   status with a "prefer not to say" option, current insurance, and the kinds
+   of help they want).
 2. The FastAPI backend runs the answers through a rules-based eligibility
    engine (`backend/engine/rules.py`) against 18 programs stored in the
    database: Medicare Parts A, B, C, and D, Medigap, Extra Help, Medicare
@@ -20,14 +22,18 @@ Team Commit Crew — Zoulkarnein (Project Lead), Ashar (Scrum Master), Ibrahima 
    The engine understands the federal 5-year waiting period for green card
    holders, the refugee/asylee exemption, and programs open to everyone
    regardless of status (WIC, Emergency Medicaid, school meals, Head Start).
-3. The React frontend shows matched programs grouped by category, each
+3. For users who confirm that they live in New York City, the backend also
+   adds a short, category-filtered list from NYC's current Benefits and
+   Programs Open Data directory. Directory records are labeled separately
+   because they are suggestions, not eligibility determinations.
+4. The React frontend shows matched programs grouped by category, each
    opening a detail page with a plain-language description, why the user may
    qualify, required documents, and the official application link.
-4. Users can create an account (register/login/logout with bcrypt-hashed
+5. Users can create an account (register/login/logout with bcrypt-hashed
    passwords and JWT tokens) and save their screenings — a user-generated
    resource with full CRUD (create, read, update/rename, delete). Updating
    a screening's answers automatically re-runs the eligibility engine.
-5. An AI assistant (floating "Ask a question" panel on results and detail
+6. An AI assistant (floating "Ask a question" panel on results and detail
    pages) explains benefits in plain language in any language via the
    Anthropic API — the Python engine decides eligibility, Claude only
    explains. Requires ANTHROPIC_API_KEY on the server; the panel degrades
@@ -48,7 +54,10 @@ carecompass/
 │   │   ├── screenings.py     Full CRUD on saved screenings (auth required)
 │   │   ├── eligibility.py    POST /api/eligibility/check
 │   │   ├── benefits.py       GET /api/benefits, GET /api/benefits/:id
+│   │   ├── nyc_benefits.py   GET /api/nyc-benefits/:id
 │   │   └── ai.py             POST /api/ai/chat (stretch)
+│   ├── services/
+│   │   └── nyc_benefits.py   Cached NYC Open Data adapter and ranking
 │   ├── engine/
 │   │   └── rules.py          Pure-Python eligibility engine (OR-logic rules)
 │   ├── models/
@@ -63,7 +72,7 @@ carecompass/
         ├── api.js            All backend calls in one place
         ├── index.css         Blue & white palette, senior-friendly sizing
         └── pages/
-            ├── Questionnaire.jsx   5-step wizard, bottom progress bar
+            ├── Questionnaire.jsx   7-step wizard, bottom progress bar
             ├── Results.jsx         Matched benefit cards + save results
             ├── BenefitDetail.jsx   Description, reasons, requirements, apply link
             ├── Login.jsx           Log in
@@ -98,6 +107,12 @@ npm run dev                     # app at http://localhost:5173
 
 Open http://localhost:5173, fill in the questionnaire (try age 67, income
 18000, household 2, has Medicare) and you should get 4 matches.
+
+The NYC Benefits and Programs dataset does not require an API key. For a
+deployed app, you can create a free Socrata app token and set
+`NYC_OPEN_DATA_APP_TOKEN` to receive higher request limits. CareCompass caches
+the directory for one hour and keeps the existing rule-based results working
+if NYC Open Data is temporarily unavailable.
 
 ## Switching to PostgreSQL (for the final)
 
@@ -138,7 +153,8 @@ curl -X POST http://localhost:8000/api/eligibility/check \
 6. Copy your Render URL (e.g. https://carecompass-api.onrender.com)
 
 ### Frontend on Vercel
-1. In `frontend/src/api.js` change BASE to your Render URL, commit and push
+1. In the Vercel project settings, add `VITE_API_BASE_URL` with your live
+   Render backend URL, then redeploy the frontend
 2. In `backend/main.py` add your Vercel URL to the CORS allow_origins list
 3. Go to https://vercel.com, sign in with GitHub, click Add New → Project
 4. Select the repo, set Root Directory to `frontend`, deploy

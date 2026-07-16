@@ -8,6 +8,7 @@ from db.database import get_db
 from db.models import Benefit
 from engine.rules import match_benefits
 from models.schemas import IntakeForm, MatchedBenefit
+from services.nyc_benefits import find_nyc_programs
 
 router = APIRouter(prefix="/api/eligibility", tags=["eligibility"])
 
@@ -20,4 +21,9 @@ def check_eligibility(intake: IntakeForm, db: Session = Depends(get_db)):
     return the 422 documented in the API contract without extra code here.
     """
     benefits = db.query(Benefit).all()
-    return match_benefits(benefits, intake)
+    matches = match_benefits(benefits, intake)
+    nyc_programs = find_nyc_programs(
+        intake,
+        existing_program_types=(match["program_type"] for match in matches),
+    )
+    return [*matches, *nyc_programs]

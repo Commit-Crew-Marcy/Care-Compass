@@ -16,7 +16,7 @@ vi.mock('../api', () => ({
 }))
 
 const ALLOWED_FIELDS = [
-  'age', 'income', 'state', 'householdSize', 'disabilityStatus', 'disabilityDetails',
+  'age', 'income', 'state', 'nycResident', 'helpCategories', 'householdSize', 'disabilityStatus', 'disabilityDetails',
   'veteranStatus', 'isPregnant', 'hasChildrenUnder18', 'hasChildrenUnder5',
   'immigrationStatus', 'yearsInUs', 'insuranceStatus', 'currentCoverage',
 ]
@@ -59,13 +59,17 @@ async function fillThroughStep5AndReachReview(user, { withDescriptions } = {}) {
     await user.click(screen.getByRole('radio', { name: /no, i do not have insurance/i }))
   }
   await user.click(screen.getByRole('button', { name: /continue/i }))
+
+  // Step 6 — types of help
+  await user.click(screen.getByRole('checkbox', { name: /health and insurance/i }))
+  await user.click(screen.getByRole('button', { name: /continue/i }))
 }
 
 describe('Questionnaire submit payload', () => {
   let user
 
   beforeEach(() => {
-    checkEligibility.mockClear()
+    checkEligibility.mockReset().mockResolvedValue([])
     user = userEvent.setup()
     render(
       <MemoryRouter>
@@ -93,6 +97,8 @@ describe('Questionnaire submit payload', () => {
     expect(payload.income).toBe(68888)
     expect(payload.householdSize).toBe(1)
     expect(payload.state).toBe('CT')
+    expect(payload.nycResident).toBe(false)
+    expect(payload.helpCategories).toEqual(['health'])
     // "other" is a frontend-only bucket for the description — the rules
     // engine doesn't recognize it, so it must never reach the API.
     expect(payload.currentCoverage).toEqual([])
@@ -106,5 +112,16 @@ describe('Questionnaire submit payload', () => {
     expect(payload.insuranceStatus).toBe(false)
     expect(payload.currentCoverage).toEqual([])
     expect(payload.yearsInUs).toBeNull()
+  })
+
+  it('shows a failed request beside the submit button and allows a retry', async () => {
+    checkEligibility.mockRejectedValueOnce({ isNetworkError: true })
+    await fillThroughStep5AndReachReview(user, { withDescriptions: false })
+    await user.click(screen.getByRole('button', { name: /find my benefits/i }))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent(/could not connect to the carecompass server/i)
+    expect(alert).toHaveFocus()
+    expect(screen.getByRole('button', { name: /find my benefits/i })).toBeEnabled()
   })
 })

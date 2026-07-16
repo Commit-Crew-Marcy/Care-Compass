@@ -3,7 +3,7 @@
 Pydantic handles the mapping via alias generators, which is what the
 "the FastAPI layer maps between them" line in the spec refers to.
 """
-from typing import List, Literal, Optional
+from typing import List, Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
@@ -12,6 +12,7 @@ from pydantic.alias_generators import to_camel
 # still returns every program without a status requirement, plus status-
 # dependent programs flagged with a "check with the agency" caveat.
 ImmigrationStatus = Literal["citizen", "green_card", "refugee_asylee", "visa", "prefer_not"]
+HelpCategory = Literal["all", "health", "food", "housing", "money", "family", "work_education"]
 
 
 class CamelModel(BaseModel):
@@ -21,7 +22,7 @@ class CamelModel(BaseModel):
 
 
 class IntakeForm(CamelModel):
-    """Body of POST /api/eligibility/check. Matches the 6-step questionnaire."""
+    """Body of POST /api/eligibility/check. Matches the 7-step questionnaire."""
 
     # The person completing the questionnaire must be an adult (18+). This
     # does not limit which programs they can be matched to for their
@@ -30,6 +31,12 @@ class IntakeForm(CamelModel):
     age: int = Field(..., ge=18, le=120)
     income: int = Field(..., ge=0, le=10_000_000)
     state: str = Field(..., min_length=2, max_length=2)
+    # NYC Open Data contains NYC-only resources. This explicit answer keeps
+    # those programs from being shown to every New York State resident.
+    nyc_resident: Optional[bool] = None
+    # Maps to the dataset's program_category field. Empty remains accepted for
+    # backward compatibility and means "all categories".
+    help_categories: List[HelpCategory] = Field(default_factory=list, max_length=7)
     household_size: int = Field(default=1, ge=1)
     disability_status: bool = False
     # Descriptive-only fields — accepted and stored but never read by rules.py
@@ -53,12 +60,18 @@ class RequirementOut(CamelModel):
 class BenefitCard(CamelModel):
     """Shape of a benefit in list responses (results page cards)."""
 
-    id: int
+    id: Union[int, str]
     name: str
     description: str
     eligibility_summary: str
     apply_url: Optional[str] = None
     program_type: str
+    source: Literal["carecompass", "nyc_open_data"] = "carecompass"
+    external_id: Optional[str] = None
+    eligibility_details: str = ""
+    application_summary: str = ""
+    government_agency: str = ""
+    source_updated_at: Optional[str] = None
 
 
 class BenefitOut(BenefitCard):
