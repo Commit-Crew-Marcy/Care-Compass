@@ -77,13 +77,146 @@ class MatchedBenefit(BenefitCard):
     match_reason: str
 
 
+class PageControl(CamelModel):
+    """One approved, currently-visible control or heading the assistant may reference."""
+
+    id: str
+    type: str
+    label: str
+
+
+class PageLink(CamelModel):
+    """One approved, currently-visible internal link the assistant may reference or navigate to."""
+
+    id: str
+    label: str
+    route: str
+
+
+class MatchedBenefitSummary(CamelModel):
+    name: str
+    description: str = ""
+
+
+class BenefitDetailSummary(CamelModel):
+    name: str
+    description: str = ""
+
+
+ResponseMode = Literal["simple", "more_detail"]
+
+
+class PageContext(CamelModel):
+    """Safe semantic summary of the page the user is looking at.
+
+    Built entirely on the frontend from approved fields only — never raw HTML,
+    scripts, hidden fields, or sensitive free text. See ai.py's PAGE CONTEXT
+    handling: this whole object is treated as untrusted reference material,
+    not instructions.
+    """
+
+    route: str = ""
+    page_title: str = ""
+    heading: str = ""
+    section_headings: List[str] = Field(default_factory=list)
+    questionnaire_step: Optional[int] = None
+    visible_controls: List[PageControl] = Field(default_factory=list)
+    visible_links: List[PageLink] = Field(default_factory=list)
+    validation_messages: List[str] = Field(default_factory=list)
+    matched_benefits: List[MatchedBenefitSummary] = Field(default_factory=list)
+    benefit_detail: Optional[BenefitDetailSummary] = None
+
+
+class ChatHistoryTurn(CamelModel):
+    role: Literal["user", "assistant"]
+    text: str
+
+
+ActionType = Literal[
+    "navigate_to_route",
+    "scroll_to_element",
+    "focus_element",
+    "go_back",
+    "open_chat",
+    "close_chat",
+]
+
+
+class ChatAction(CamelModel):
+    type: ActionType
+    target: Optional[str] = None
+    requires_confirmation: bool = False
+
+
 class ChatRequest(CamelModel):
-    question: str = Field(..., min_length=1)
-    matched_benefits: List[dict] = Field(default_factory=list)
+    question: str = Field(..., min_length=1, max_length=2000)
+    page_context: Optional[PageContext] = None
+    response_mode: ResponseMode = "simple"
+    # Short recent-turn history so follow-ups like "read this more simply" make
+    # sense. Only role/text — never persisted server-side beyond this request.
+    history: List[ChatHistoryTurn] = Field(default_factory=list)
 
 
 class ChatResponse(CamelModel):
-    answer: str
+    message: str
+    action: Optional[ChatAction] = None
+
+
+ExtensionElementAction = Literal["scroll", "focus", "click"]
+ExtensionActionType = Literal[
+    "scroll_to_element",
+    "focus_element",
+    "click_element",
+    "go_back",
+]
+
+
+class ExtensionInteractiveElement(CamelModel):
+    """A visible page control captured by the browser extension.
+
+    The extension creates opaque, short-lived ids and decides which actions
+    each element supports. Input values are never included.
+    """
+
+    id: str = Field(..., min_length=1, max_length=80)
+    role: str = Field(default="control", max_length=40)
+    label: str = Field(..., min_length=1, max_length=240)
+    tag: str = Field(default="", max_length=30)
+    input_type: str = Field(default="", max_length=30)
+    in_form: bool = False
+    href: Optional[str] = Field(default=None, max_length=2048)
+    allowed_actions: List[ExtensionElementAction] = Field(default_factory=list, max_length=3)
+
+
+class ExtensionPageContext(CamelModel):
+    """Filtered visible-page context supplied by the Chrome extension."""
+
+    url: str = Field(..., min_length=8, max_length=2048)
+    domain: str = Field(default="", max_length=255)
+    page_title: str = Field(default="", max_length=300)
+    heading: str = Field(default="", max_length=300)
+    section_headings: List[str] = Field(default_factory=list, max_length=24)
+    page_text: str = Field(default="", max_length=12_000)
+    selected_text: str = Field(default="", max_length=2_000)
+    interactive_elements: List[ExtensionInteractiveElement] = Field(default_factory=list, max_length=60)
+
+
+class ExtensionChatAction(CamelModel):
+    type: ExtensionActionType
+    target: Optional[str] = None
+    requires_confirmation: bool = False
+
+
+class ExtensionChatRequest(CamelModel):
+    question: str = Field(..., min_length=1, max_length=2000)
+    page_context: ExtensionPageContext
+    response_mode: ResponseMode = "simple"
+    history: List[ChatHistoryTurn] = Field(default_factory=list, max_length=6)
+
+
+class ExtensionChatResponse(CamelModel):
+    message: str
+    action: Optional[ExtensionChatAction] = None
 
 
 class Message(CamelModel):

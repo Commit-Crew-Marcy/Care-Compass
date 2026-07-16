@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router-dom'
 import { getBenefit } from '../api'
-import ChatPanel from '../components/ChatPanel'
+import ExtensionPrompt from '../components/ExtensionPrompt'
+import { useSetPageContext } from '../pageContext'
 
 export default function BenefitDetail() {
   const { id } = useParams()
@@ -12,6 +13,29 @@ export default function BenefitDetail() {
   useEffect(() => {
     getBenefit(id).then(setBenefit).catch(() => setError('We could not load this benefit.'))
   }, [id])
+
+  const matchReason = state?.matchReason || benefit?.eligibilitySummary || ''
+
+  // Safe page-context summary — the benefit's public name/description and
+  // the visible controls only, never the raw questionnaire intake.
+  const pageContext = useMemo(
+    () => ({
+      route: `/benefits/${id}`,
+      pageTitle: benefit ? benefit.name : 'CareCompass Benefit Detail',
+      heading: benefit ? benefit.name : '',
+      sectionHeadings: benefit
+        ? ['What is this program?', 'Why you may qualify', ...(benefit.requirements?.length ? ['What you will need to apply'] : [])]
+        : [],
+      visibleControls: [
+        { id: 'back-to-results-link', type: 'link', label: 'Back to results' },
+        ...(benefit?.applyUrl ? [{ id: 'apply-official-site-link', type: 'link', label: 'Apply on the official site' }] : []),
+      ],
+      benefitDetail: benefit ? { name: benefit.name, description: benefit.description } : null,
+      matchedBenefits: benefit ? [{ name: benefit.name, description: matchReason }] : [],
+    }),
+    [benefit, id, matchReason]
+  )
+  useSetPageContext(pageContext)
 
   if (error) {
     return (
@@ -26,7 +50,7 @@ export default function BenefitDetail() {
 
   return (
     <main className="container">
-      <Link className="back-link" to="/results">← Back to results</Link>
+      <Link id="back-to-results-link" className="back-link" to="/results">← Back to results</Link>
       <h1>{benefit.name}</h1>
       <span className="badge">✓ Likely eligible</span>
       <span className="badge badge--estimate">Estimate, not final</span>
@@ -36,7 +60,7 @@ export default function BenefitDetail() {
         <p>{benefit.description}</p>
 
         <h3>Why you may qualify</h3>
-        <p>{state?.matchReason || benefit.eligibilitySummary}</p>
+        <p>{matchReason}</p>
 
         {benefit.requirements?.length > 0 && (
           <>
@@ -49,18 +73,19 @@ export default function BenefitDetail() {
       </div>
 
       {benefit.applyUrl && (
-        <a className="btn btn-primary" href={benefit.applyUrl} target="_blank" rel="noreferrer"
-          style={{ marginTop: 24 }}>
-          Apply on the official site ↗
-        </a>
+        <>
+          <ExtensionPrompt />
+          <a id="apply-official-site-link" className="btn btn-primary" href={benefit.applyUrl} target="_blank" rel="noreferrer"
+            style={{ marginTop: 24 }}>
+            Apply on the official site ↗
+          </a>
+        </>
       )}
 
       <p className="disclaimer">
         CareCompass is an informational guide, not an official eligibility
         determination. Confirm details with the program's agency before applying.
       </p>
-
-      <ChatPanel contextBenefits={[benefit]} />
     </main>
   )
 }

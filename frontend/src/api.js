@@ -15,13 +15,14 @@ const BASE = resolveApiBase(import.meta.env.VITE_API_BASE_URL, import.meta.env.D
 // Structured error thrown by every failed request. UI code can branch on
 // `status` / `isNetworkError` instead of parsing a message string.
 export class ApiError extends Error {
-  constructor({ status = null, detail = null, validationErrors = null, isNetworkError = false } = {}) {
+  constructor({ status = null, detail = null, validationErrors = null, isNetworkError = false, aborted = false } = {}) {
     super(detail || (isNetworkError ? 'Network error' : `Request failed (${status})`))
     this.name = 'ApiError'
     this.status = status
     this.detail = detail
     this.validationErrors = validationErrors
     this.isNetworkError = isNetworkError
+    this.aborted = aborted
   }
 }
 
@@ -40,7 +41,7 @@ export function clearSession() {
   localStorage.removeItem('cc_user')
 }
 
-async function request(path, { method = 'GET', body, auth = false } = {}) {
+async function request(path, { method = 'GET', body, auth = false, signal } = {}) {
   const headers = { 'Content-Type': 'application/json' }
   if (auth) headers['Authorization'] = `Bearer ${getToken()}`
 
@@ -50,8 +51,12 @@ async function request(path, { method = 'GET', body, auth = false } = {}) {
       method,
       headers,
       body: body ? JSON.stringify(body) : undefined,
+      signal,
     })
   } catch (err) {
+    if (err.name === 'AbortError') {
+      throw new ApiError({ isNetworkError: true, detail: 'Request stopped.', aborted: true })
+    }
     // fetch() only throws for network-level failures (unreachable host,
     // CORS rejection, offline) — never for HTTP error status codes.
     throw new ApiError({ isNetworkError: true, detail: err.message })
@@ -100,8 +105,14 @@ export const checkEligibility = (intake) =>
 
 export const getBenefit = (id) => request(`/api/benefits/${id}`)
 
-export const askAi = (question, matchedBenefits = []) =>
-  request('/api/ai/chat', { method: 'POST', body: { question, matchedBenefits } })
+// pageContext: safe semantic summary of the current page (see pageContext.jsx).
+// responseMode: 'simple' | 'more_detail'. history: last few {role, text} turns.
+export const askAi = (question, { pageContext = null, responseMode = 'simple', history = [], signal } = {}) =>
+  request('/api/ai/chat', {
+    method: 'POST',
+    body: { question, pageContext, responseMode, history },
+    signal,
+  })
 
 // ---- auth ----
 export async function register(email, password) {

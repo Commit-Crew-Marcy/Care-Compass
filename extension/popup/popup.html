@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CareCompass Browser Guide</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+
+  <body>
+    <main class="guide-shell">
+      <header class="guide-header">
+        <div>
+          <p class="eyebrow">CARECOMPASS</p>
+          <h1>Browser Guide</h1>
+        </div>
+        <span class="guide-mark" aria-hidden="true">CC</span>
+      </header>
+
+      <section class="page-status" aria-live="polite">
+        <span id="status-dot" class="status-dot" aria-hidden="true"></span>
+        <div>
+          <p id="status">Reading this page…</p>
+          <p id="page-title" class="page-title"></p>
+        </div>
+      </section>
+
+      <fieldset class="mode-fieldset">
+        <legend>Answer length</legend>
+        <label class="mode-option selected">
+          <input type="radio" name="response-mode" value="simple" checked />
+          Simple
+        </label>
+        <label class="mode-option">
+          <input type="radio" name="response-mode" value="more_detail" />
+          More detail
+        </label>
+      </fieldset>
+
+      <section id="messages" class="messages" aria-live="polite" aria-atomic="false">
+        <div id="welcome" class="welcome">
+          <p>I can explain this page and help you find the next step.</p>
+          <div class="suggestions">
+            <button type="button" class="suggestion" data-question="Explain this page simply.">
+              Explain this page
+            </button>
+            <button type="button" class="suggestion" data-question="What should I do next?">
+              What should I do next?
+            </button>
+            <button type="button" class="suggestion" data-question="Find the most important button or link on this page.">
+              Find the important button
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section id="confirmation" class="confirmation" hidden aria-live="assertive">
+        <p id="confirmation-text"></p>
+        <div class="confirmation-actions">
+          <button id="cancel-action" type="button" class="button button-secondary">Cancel</button>
+          <button id="confirm-action" type="button" class="button button-primary">Continue</button>
+        </div>
+      </section>
+
+      <p class="privacy-note">
+        Do not enter passwords, Social Security numbers, policy numbers, or immigration document numbers.
+      </p>
+
+      <form id="question-form" class="question-form">
+        <label for="question" class="sr-only">Ask about this page</label>
+        <textarea id="question" rows="2" maxlength="2000" placeholder="Ask about this page"></textarea>
+        <button id="send-button" type="submit" class="button button-primary">Send</button>
+      </form>
+    </main>
+
+    <script src="../shared.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>
