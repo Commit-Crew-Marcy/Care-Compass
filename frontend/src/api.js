@@ -11,6 +11,7 @@ export function resolveApiBase(envUrl, isDev) {
 }
 
 const BASE = resolveApiBase(import.meta.env.VITE_API_BASE_URL, import.meta.env.DEV)
+export const ELIGIBILITY_REQUEST_TIMEOUT_MS = 45_000
 
 // Structured error thrown by every failed request. UI code can branch on
 // `status` / `isNetworkError` instead of parsing a message string.
@@ -54,7 +55,7 @@ async function request(path, { method = 'GET', body, auth = false, signal } = {}
       signal,
     })
   } catch (err) {
-    if (err.name === 'AbortError') {
+    if (err?.name === 'AbortError') {
       throw new ApiError({ isNetworkError: true, detail: 'Request stopped.', aborted: true })
     }
     // fetch() only throws for network-level failures (unreachable host,
@@ -92,7 +93,9 @@ async function requestWithRetry(path, opts) {
   try {
     return await request(path, opts)
   } catch (err) {
-    const shouldRetry = err instanceof ApiError && (err.isNetworkError || RETRYABLE_STATUSES.includes(err.status))
+    const shouldRetry = err instanceof ApiError
+      && !err.aborted
+      && (err.isNetworkError || RETRYABLE_STATUSES.includes(err.status))
     if (!shouldRetry) throw err
     await new Promise((resolve) => setTimeout(resolve, 3000))
     return request(path, opts)
@@ -100,10 +103,36 @@ async function requestWithRetry(path, opts) {
 }
 
 // ---- public ----
-export const checkEligibility = (intake) =>
-  requestWithRetry('/api/eligibility/check', { method: 'POST', body: intake })
+export async function checkEligibility(intake) {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), ELIGIBILITY_REQUEST_TIMEOUT_MS)
+  try {
+    return await requestWithRetry('/api/eligibility/check', {
+      method: 'POST',
+      body: intake,
+      signal: controller.signal,
+    })
+  } catch (err) {
+    if (err instanceof ApiError && err.aborted) {
+      throw new ApiError({
+        isNetworkError: true,
+        aborted: true,
+        detail: 'The CareCompass server took too long to respond.',
+      })
+    }
+    throw err
+  } finally {
+    clearTimeout(timeout)
+  }
+}
 
-export const getBenefit = (id) => request(`/api/benefits/${id}`)
+export const getBenefit = (id) => {
+  const value = String(id)
+  if (value.startsWith('nyc-')) {
+    return request(`/api/nyc-benefits/${encodeURIComponent(value.slice(4))}`)
+  }
+  return request(`/api/benefits/${encodeURIComponent(value)}`)
+}
 
 // pageContext: safe semantic summary of the current page (see pageContext.jsx).
 // responseMode: 'simple' | 'more_detail'. history: last few {role, text} turns.

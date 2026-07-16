@@ -14,6 +14,7 @@ export default function BenefitDetail() {
     getBenefit(id).then(setBenefit).catch(() => setError('We could not load this benefit.'))
   }, [id])
 
+  const isNycProgram = benefit?.source === 'nyc_open_data'
   const matchReason = state?.matchReason || benefit?.eligibilitySummary || ''
 
   // Safe page-context summary — the benefit's public name/description and
@@ -24,7 +25,12 @@ export default function BenefitDetail() {
       pageTitle: benefit ? benefit.name : 'CareCompass Benefit Detail',
       heading: benefit ? benefit.name : '',
       sectionHeadings: benefit
-        ? ['What is this program?', 'Why you may qualify', ...(benefit.requirements?.length ? ['What you will need to apply'] : [])]
+        ? [
+            'What is this program?',
+            isNycProgram ? 'Why we showed this' : 'Why you may qualify',
+            ...(isNycProgram && benefit.eligibilityDetails ? ['Official eligibility details'] : []),
+            ...(benefit.requirements?.length ? ['What you will need to apply'] : []),
+          ]
         : [],
       visibleControls: [
         { id: 'back-to-results-link', type: 'link', label: 'Back to results' },
@@ -33,7 +39,7 @@ export default function BenefitDetail() {
       benefitDetail: benefit ? { name: benefit.name, description: benefit.description } : null,
       matchedBenefits: benefit ? [{ name: benefit.name, description: matchReason }] : [],
     }),
-    [benefit, id, matchReason]
+    [benefit, id, isNycProgram, matchReason]
   )
   useSetPageContext(pageContext)
 
@@ -52,15 +58,35 @@ export default function BenefitDetail() {
     <main className="container">
       <Link id="back-to-results-link" className="back-link" to="/results">← Back to results</Link>
       <h1>{benefit.name}</h1>
-      <span className="badge">✓ Likely eligible</span>
-      <span className="badge badge--estimate">Estimate, not final</span>
+      {isNycProgram ? (
+        <span className="badge badge--estimate">NYC resource · Check eligibility</span>
+      ) : (
+        <>
+          <span className="badge">✓ Likely eligible</span>
+          <span className="badge badge--estimate">Estimate, not final</span>
+        </>
+      )}
 
       <div className="detail-section">
         <h3>What is this program?</h3>
         <p>{benefit.description}</p>
 
-        <h3>Why you may qualify</h3>
+        <h3>{isNycProgram ? 'Why we showed this' : 'Why you may qualify'}</h3>
         <p>{matchReason}</p>
+
+        {isNycProgram && benefit.eligibilityDetails && (
+          <>
+            <h3>Official eligibility details</h3>
+            <p>{benefit.eligibilityDetails}</p>
+          </>
+        )}
+
+        {isNycProgram && benefit.applicationSummary && (
+          <>
+            <h3>How to apply</h3>
+            <p>{benefit.applicationSummary}</p>
+          </>
+        )}
 
         {benefit.requirements?.length > 0 && (
           <>
@@ -77,9 +103,17 @@ export default function BenefitDetail() {
           <ExtensionPrompt />
           <a id="apply-official-site-link" className="btn btn-primary" href={benefit.applyUrl} target="_blank" rel="noreferrer"
             style={{ marginTop: 24 }}>
-            Apply on the official site ↗
+            {isNycProgram ? 'Visit the official program site ↗' : 'Apply on the official site ↗'}
           </a>
         </>
+      )}
+
+      {isNycProgram && (
+        <p className="source-attribution">
+          Source: <a href="https://data.cityofnewyork.us/resource/kvhd-5fmu.json" target="_blank" rel="noreferrer">NYC Benefits and Programs Dataset</a>
+          {benefit.governmentAgency ? ` · ${benefit.governmentAgency}` : ''}
+          {benefit.sourceUpdatedAt ? ` · Updated ${new Date(benefit.sourceUpdatedAt).toLocaleDateString()}` : ''}
+        </p>
       )}
 
       <p className="disclaimer">

@@ -101,7 +101,7 @@ ALLOWED_ACTION_TYPES = {
 }
 
 STATIC_ROUTES = {"/", "/questionnaire", "/results", "/login", "/register", "/screenings"}
-BENEFIT_ROUTE_RE = re.compile(r"^/benefits/\d+$")
+BENEFIT_ROUTE_RE = re.compile(r"^/benefits/(?:\d+|nyc-[A-Za-z0-9_-]+)$")
 
 ACTION_TOOL = {
     "name": "suggest_action",

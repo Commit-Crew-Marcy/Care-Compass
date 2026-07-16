@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { checkEligibility } from '../api'
 import { saveLatestScreening } from '../resultsStorage'
@@ -10,6 +10,9 @@ import { validateAge, validateIncome } from '../validation'
 const WAKE_NOTICE_DELAY_MS = 6000
 
 function messageForSubmitError(err) {
+  if (err?.aborted) {
+    return 'The CareCompass server took too long to respond. Please try again.'
+  }
   if (err?.isNetworkError) {
     return 'We could not connect to the CareCompass server. Please wait a moment and try again.'
   }
@@ -19,7 +22,7 @@ function messageForSubmitError(err) {
   return 'CareCompass could not process your answers right now. Please try again.'
 }
 
-// The 6-step wizard. One small group of questions per step so the form
+// The 7-step wizard. One small group of questions per step so the form
 // never overwhelms the user. Progress lives in a fixed bar at the bottom.
 // Step 4 (immigration) is optional by design: "prefer not to say" still
 // returns every program without a status requirement.
@@ -106,7 +109,17 @@ const DISABILITY_DETAILS = [
   { key: 'other',     label: 'Another disability or support need' },
 ]
 
-const TOTAL_STEPS = 6
+const HELP_CATEGORIES = [
+  { key: 'all', label: 'Show me all kinds of help' },
+  { key: 'health', label: 'Health and insurance' },
+  { key: 'food', label: 'Food and groceries' },
+  { key: 'housing', label: 'Housing and rent' },
+  { key: 'money', label: 'Money, bills, and city services' },
+  { key: 'family', label: 'Family, child care, and activities' },
+  { key: 'work_education', label: 'Work and education' },
+]
+
+const TOTAL_STEPS = 7
 
 // Safe, structural-only descriptions of each step for the AI Guide — labels
 // only, never the values the user has entered.
@@ -116,7 +129,8 @@ const STEP_HEADINGS = {
   3: 'Tell us about you and your family',
   4: 'Are you new to the United States?',
   5: 'Do you currently have health insurance?',
-  6: 'Review your information',
+  6: 'What kind of help are you looking for?',
+  7: 'Review your information',
 }
 
 const STEP_FIELD_CONTROLS = {
@@ -131,7 +145,8 @@ const STEP_FIELD_CONTROLS = {
   3: [{ id: 'step-heading', type: 'heading', label: 'Do you have a disability, long-term condition, or support need?' }],
   4: [{ id: 'step-heading', type: 'heading', label: 'Are you new to the United States?' }],
   5: [{ id: 'step-heading', type: 'heading', label: 'Do you currently have health insurance?' }],
-  6: [],
+  6: [{ id: 'help-categories', type: 'group', label: 'Types of help' }],
+  7: [],
 }
 
 export default function Questionnaire() {
@@ -142,10 +157,12 @@ export default function Questionnaire() {
   const [incomeError, setIncomeError] = useState('')
   const [loading, setLoading] = useState(false)
   const [waking, setWaking] = useState(false)
+  const submitErrorRef = useRef(null)
   const [childUnder5Error, setChildUnder5Error] = useState('')
   const [form, setForm] = useState({
     age: '',
     state: '',
+    nycResident: null,
     income: '',
     householdSize: '1',
     disabilityStatus: null,       // null = no selection, true = yes, false = no
@@ -162,9 +179,16 @@ export default function Questionnaire() {
     insuranceStatus: false,
     currentCoverage: [],
     otherCoverageText: '',
+    helpCategories: [],
   })
 
   const set = (field, value) => setForm((f) => ({ ...f, [field]: value }))
+
+  // A submit error is rendered beside the submit button. Move focus there so
+  // keyboard and screen-reader users do not miss it after a failed request.
+  useEffect(() => {
+    if (step === TOTAL_STEPS && error) submitErrorRef.current?.focus()
+  }, [error, step])
 
   const validationMessages = [error, ageError, incomeError, childUnder5Error].filter(Boolean)
 
@@ -215,15 +239,32 @@ export default function Questionnaire() {
       }
     })
 
+  const toggleHelpCategory = (key) =>
+    setForm((f) => {
+      if (key === 'all') {
+        return { ...f, helpCategories: f.helpCategories.includes('all') ? [] : ['all'] }
+      }
+      const withoutAll = f.helpCategories.filter((category) => category !== 'all')
+      const next = withoutAll.includes(key)
+        ? withoutAll.filter((category) => category !== key)
+        : [...withoutAll, key]
+      return { ...f, helpCategories: next }
+    })
+
   // Simple per-step validation so users can't continue with missing answers
   const stepValid = () => {
-    if (step === 1) return validateAge(form.age) === '' && form.state !== ''
+    if (step === 1) {
+      return validateAge(form.age) === ''
+        && form.state !== ''
+        && (form.state !== 'NY' || form.nycResident !== null)
+    }
     if (step === 2) return validateIncome(form.income) === '' && Number(form.householdSize) >= 1
     if (step === 3) {
       if (form.disabilityStatus === null) return false
       return true
     }
     if (step === 4 && form.immigrationStatus === 'green_card') return form.yearsInUs !== ''
+    if (step === 6) return form.helpCategories.length > 0
     return true
   }
 
@@ -234,6 +275,10 @@ export default function Questionnaire() {
       setAgeError('')
       if (!form.state) {
         setError('Please select your state before continuing.')
+        return
+      }
+      if (form.state === 'NY' && form.nycResident === null) {
+        setError('Please select whether you live in New York City.')
         return
       }
       setError('')
@@ -266,6 +311,10 @@ export default function Questionnaire() {
       setStep((s) => Math.min(s + 1, TOTAL_STEPS))
       return
     }
+    if (step === 6 && form.helpCategories.length === 0) {
+      setError('Select at least one type of help, or choose “Show me all kinds of help.”')
+      return
+    }
     if (!stepValid()) {
       setError('Please answer the questions on this page before continuing.')
       return
@@ -289,6 +338,8 @@ export default function Questionnaire() {
         age: Number(form.age),
         income: Number(form.income),
         state: form.state,
+        nycResident: form.state === 'NY' && form.nycResident === true,
+        helpCategories: form.helpCategories,
         householdSize: Number(form.householdSize),
         disabilityStatus: form.disabilityStatus === true,
         // Descriptive field — saved for context only, does not affect eligibility matching
@@ -332,7 +383,7 @@ export default function Questionnaire() {
 
   return (
     <main className="container">
-      {error && <div className="error-box">{error}</div>}
+      {error && step !== TOTAL_STEPS && <div className="error-box" role="alert">{error}</div>}
 
       {step === 1 && (
         <>
@@ -378,7 +429,20 @@ export default function Questionnaire() {
             </div>
             <div className="field-group">
               <label htmlFor="state">Your state</label>
-              <select id="state" value={form.state} onChange={(e) => set('state', e.target.value)}>
+              <select
+                id="state"
+                value={form.state}
+                onChange={(e) => {
+                  const state = e.target.value
+                  setForm((current) => ({
+                    ...current,
+                    state,
+                    nycResident: state === 'NY'
+                      ? (current.state === 'NY' ? current.nycResident : null)
+                      : false,
+                  }))
+                }}
+              >
                 <option value="">Select your state</option>
                 {STATES.map((s) => (
                   <option key={s.abbr} value={s.abbr}>{s.name} ({s.abbr})</option>
@@ -387,6 +451,38 @@ export default function Questionnaire() {
               <p className="field-hint">Programs and income limits may differ by state.</p>
             </div>
           </div>
+
+          {form.state === 'NY' && (
+            <fieldset className="ds-fieldset">
+              <legend className="ds-legend">Do you live in New York City?</legend>
+              <p id="nyc-resident-hint" className="field-hint ds-hint">
+                New York City publishes a separate directory of city programs.
+                This includes the Bronx, Brooklyn, Manhattan, Queens, and Staten Island.
+              </p>
+              <div className="ds-radio-group">
+                <label className={`check-card ${form.nycResident === true ? 'selected' : ''}`}>
+                  <input
+                    type="radio"
+                    name="nycResident"
+                    checked={form.nycResident === true}
+                    aria-describedby="nyc-resident-hint"
+                    onChange={() => set('nycResident', true)}
+                  />
+                  Yes
+                </label>
+                <label className={`check-card ${form.nycResident === false ? 'selected' : ''}`}>
+                  <input
+                    type="radio"
+                    name="nycResident"
+                    checked={form.nycResident === false}
+                    aria-describedby="nyc-resident-hint"
+                    onChange={() => set('nycResident', false)}
+                  />
+                  No
+                </label>
+              </div>
+            </fieldset>
+          )}
         </>
       )}
 
@@ -707,10 +803,46 @@ export default function Questionnaire() {
 
       {step === 6 && (
         <>
+          <h1 id="step-heading">What kind of help are you looking for?</h1>
+          <p className="subtitle">
+            Select one or more. This helps us keep New York City directory results short and useful.
+          </p>
+          <fieldset id="help-categories" className="ds-detail-fieldset">
+            <legend className="sr-only">Types of help</legend>
+            <div className="ds-checkbox-grid">
+              {HELP_CATEGORIES.map((option) => {
+                const checked = form.helpCategories.includes(option.key)
+                return (
+                  <label key={option.key} className={`check-card ${checked ? 'selected' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleHelpCategory(option.key)}
+                    />
+                    {option.label}
+                  </label>
+                )
+              })}
+            </div>
+          </fieldset>
+          <p className="disclaimer">
+            These choices filter directory suggestions only. They do not change whether you qualify.
+          </p>
+        </>
+      )}
+
+      {step === 7 && (
+        <>
           <h1 id="step-heading">Review your information</h1>
           <p className="subtitle">Make sure everything looks right before we find your matches.</p>
           <div className="review-row"><span>Age</span><span>{form.age}</span></div>
           <div className="review-row"><span>State</span><span>{form.state}</span></div>
+          {form.state === 'NY' && (
+            <div className="review-row">
+              <span>New York City resident</span>
+              <span>{form.nycResident ? 'Yes' : 'No'}</span>
+            </div>
+          )}
           <div className="review-row"><span>Annual income</span><span>${Number(form.income).toLocaleString()}</span></div>
           <div className="review-row"><span>Household size</span><span>{form.householdSize}</span></div>
           <div className="review-row">
@@ -762,6 +894,14 @@ export default function Questionnaire() {
               <span>{form.otherCoverageText}</span>
             </div>
           )}
+          <div className="review-row">
+            <span>Looking for</span>
+            <span>
+              {form.helpCategories
+                .map((key) => HELP_CATEGORIES.find((option) => option.key === key)?.label || key)
+                .join(', ')}
+            </span>
+          </div>
         </>
       )}
 
@@ -775,6 +915,17 @@ export default function Questionnaire() {
             <p className="field-hint" style={{ textAlign: 'center' }} aria-live="polite">
               The secure server may be waking up. This can take up to a minute.
             </p>
+          )}
+          {step === TOTAL_STEPS && error && (
+            <div
+              id="questionnaire-submit-error"
+              className="error-box submit-error"
+              role="alert"
+              tabIndex={-1}
+              ref={submitErrorRef}
+            >
+              {error}
+            </div>
           )}
           <div className="btn-row">
             {step > 1 && <button id="back-button" className="btn btn-outline" onClick={back} disabled={loading}>Back</button>}

@@ -1,4 +1,4 @@
-import { resolveApiBase } from '../api'
+import { ELIGIBILITY_REQUEST_TIMEOUT_MS, getBenefit, resolveApiBase } from '../api'
 
 describe('resolveApiBase', () => {
   it('uses the Render URL in production when VITE_API_BASE_URL is absent', () => {
@@ -67,5 +67,43 @@ describe('request() error handling', () => {
     await vi.runAllTimersAsync()
     await pending
     vi.useRealTimers()
+  })
+
+  it('stops an eligibility request that never responds', async () => {
+    vi.useFakeTimers()
+    global.fetch = vi.fn((_url, { signal }) => new Promise((_resolve, reject) => {
+      signal.addEventListener('abort', () => {
+        reject(Object.assign(new Error('Aborted'), { name: 'AbortError' }))
+      })
+    }))
+
+    const pending = expect(import('../api').then(({ checkEligibility }) => checkEligibility({})))
+      .rejects.toMatchObject({ aborted: true, isNetworkError: true })
+    await vi.advanceTimersByTimeAsync(ELIGIBILITY_REQUEST_TIMEOUT_MS)
+    await pending
+    vi.useRealTimers()
+  })
+})
+
+describe('getBenefit', () => {
+  const originalFetch = global.fetch
+
+  afterEach(() => {
+    global.fetch = originalFetch
+    vi.restoreAllMocks()
+  })
+
+  it('routes NYC directory IDs to the NYC detail endpoint', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: 'nyc-P015en' }),
+    })
+
+    await getBenefit('nyc-P015en')
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringMatching(/\/api\/nyc-benefits\/P015en$/),
+      expect.any(Object)
+    )
   })
 })

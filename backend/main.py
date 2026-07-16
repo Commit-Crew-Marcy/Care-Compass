@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from db.database import Base, engine
-from routers import ai, auth, benefits, eligibility, screenings
+from routers import ai, auth, benefits, eligibility, nyc_benefits, screenings
 
 Base.metadata.create_all(bind=engine)
 
@@ -21,13 +21,11 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "https://care-compass-three.vercel.app",
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:5174",
-        "http://127.0.0.1:5174",
-        "http://localhost:5175",
-        "http://127.0.0.1:5175",
     ],
+    # Vite chooses the next open port when another dev server is already
+    # running. Permit localhost/127.0.0.1 on any port so a second local server
+    # does not fail with a misleading frontend "could not connect" message.
+    allow_origin_regex=r"^http://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -37,6 +35,7 @@ app.include_router(auth.router)
 app.include_router(eligibility.router)
 app.include_router(screenings.router)
 app.include_router(benefits.router)
+app.include_router(nyc_benefits.router)
 app.include_router(ai.router)
 
 

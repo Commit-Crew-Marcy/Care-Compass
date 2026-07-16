@@ -54,6 +54,7 @@ def test_approved_static_routes_are_accepted():
 def test_approved_benefit_detail_route_pattern():
     assert is_approved_route("/benefits/42") is True
     assert is_approved_route("/benefits/0") is True
+    assert is_approved_route("/benefits/nyc-P015en") is True
 
 
 def test_arbitrary_and_external_urls_are_rejected():

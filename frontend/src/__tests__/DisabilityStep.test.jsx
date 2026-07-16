@@ -22,7 +22,7 @@ vi.mock('../api', () => ({
 async function advanceToStep3(user) {
   // Step 1 — age + state
   await user.type(screen.getByLabelText(/your age/i), '50')
-  await user.selectOptions(screen.getByLabelText(/your state/i), 'NY')
+  await user.selectOptions(screen.getByLabelText(/your state/i), 'CT')
   await user.click(screen.getByRole('button', { name: /continue/i }))
 
   // Step 2 — income (household size defaults to 1)

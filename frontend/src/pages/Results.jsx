@@ -21,15 +21,19 @@ const GROUPS = [
   },
   {
     title: 'Health coverage',
-    types: ['medicaid', 'emergency_medicaid', 'chip', 'marketplace'],
+    types: ['medicaid', 'emergency_medicaid', 'chip', 'marketplace', 'health'],
   },
   {
     title: 'Food and family support',
-    types: ['snap', 'wic', 'school_lunch', 'head_start', 'tanf'],
+    types: ['snap', 'wic', 'school_lunch', 'head_start', 'tanf', 'food', 'family', 'child_care'],
   },
   {
     title: 'Money and utility help',
-    types: ['ssi', 'liheap'],
+    types: ['ssi', 'liheap', 'cash', 'housing', 'city_id'],
+  },
+  {
+    title: 'Work, education, and activities',
+    types: ['work', 'education', 'enrichment'],
   },
 ]
 
@@ -73,6 +77,7 @@ export default function Results() {
   }
 
   const grouped = useMemo(() => (results ? groupResults(results) : []), [results])
+  const nycResultCount = results?.filter((benefit) => benefit.source === 'nyc_open_data').length || 0
 
   // Safe page-context summary for the AI Guide — only names and short,
   // already-public descriptions, never raw intake answers.
@@ -80,7 +85,7 @@ export default function Results() {
     () => ({
       route: '/results',
       pageTitle: 'CareCompass Results',
-      heading: results ? 'Your matched benefits' : 'No results yet',
+      heading: results ? 'Your possible benefits and resources' : 'No results yet',
       sectionHeadings: grouped.map((g) => g.title),
       visibleControls: results
         ? [{ id: 'start-new-questionnaire-button', type: 'button', label: 'Start a new questionnaire' }]
@@ -120,10 +125,17 @@ export default function Results() {
 
   return (
     <main className="container">
-      <h1>Your matched benefits</h1>
+      <h1>Your possible benefits and resources</h1>
       <p className="subtitle">
-        {results.length} program{results.length === 1 ? '' : 's'} found based on your information
+        {results.length} possible match{results.length === 1 ? '' : 'es'} found based on your answers
       </p>
+
+      {nycResultCount > 0 && (
+        <div className="source-notice">
+          <strong>{nycResultCount} current New York City resource{nycResultCount === 1 ? '' : 's'} included.</strong>{' '}
+          These come from the NYC Benefits and Programs directory. They may be relevant, but their official requirements still need to be checked.
+        </div>
+      )}
 
       {results.length > 0 && <ExtensionPrompt />}
 
@@ -180,7 +192,9 @@ export default function Results() {
               className="card"
               key={b.id}
             >
-              <span className="badge">✓ Likely eligible</span>
+              {b.source === 'nyc_open_data'
+                ? <span className="badge badge--estimate">NYC resource · Check eligibility</span>
+                : <span className="badge">✓ Likely eligible</span>}
               <h2>{b.name}</h2>
               <p>{b.eligibilitySummary}</p>
             </Link>
