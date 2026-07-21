@@ -35,10 +35,10 @@ Team Commit Crew — Zoulkarnein (Project Lead), Ashar (Scrum Master), Ibrahima 
    a screening's answers automatically re-runs the eligibility engine.
 6. An AI assistant (floating "Ask a question" panel on results and detail
    pages) explains benefits in plain language in any language via the
-   Anthropic API — the Python engine decides eligibility, Claude only
-   explains. Requires ANTHROPIC_API_KEY on the server; the panel degrades
+   Gemini API — the Python engine decides eligibility, the AI only
+   explains. Requires GEMINI_API_KEY on the server; the panel degrades
    gracefully when the key is not set.
-7. The optional Chrome Browser Guide uses Gemini to explain the visible page
+7. The optional Chrome Browser Guide also uses Gemini to explain the visible page
    in short, senior-friendly language and suggest one safe navigation action.
    Page actions are validated by both the backend and extension, and clicks
    require confirmation.
@@ -133,11 +133,11 @@ No code changes needed — `db/database.py` reads the env var.
 
 ## Enabling the AI features
 
-Copy `backend/.env.example` to `backend/.env`. Set `ANTHROPIC_API_KEY` for the
-website's floating assistant and `GEMINI_API_KEY` for the Chrome Browser Guide.
-The extension defaults to the stable `gemini-3.5-flash` model; override it with
-`GEMINI_MODEL` if needed. Keys remain on the backend and must never be placed
-in extension JavaScript or `manifest.json`.
+Copy `backend/.env.example` to `backend/.env` and set `GEMINI_API_KEY` — it
+powers both the website's floating assistant and the Chrome Browser Guide.
+Both default to the stable `gemini-3.5-flash` model; override it with
+`GEMINI_MODEL` if needed. The key remains on the backend and must never be
+placed in extension JavaScript or `manifest.json`.
 
 ## Testing the API directly
 
@@ -156,8 +156,7 @@ curl -X POST http://localhost:8000/api/eligibility/check \
 3. Settings: Root Directory `backend`, Build Command `pip install -r requirements.txt`,
    Start Command `uvicorn main:app --host 0.0.0.0 --port $PORT`
 4. Add environment variable `SECRET_KEY` set to any long random string. Add
-   `GEMINI_API_KEY` to enable the Chrome Browser Guide and
-   `ANTHROPIC_API_KEY` only if you also want the website assistant.
+   `GEMINI_API_KEY` to enable the website assistant and the Chrome Browser Guide.
 5. Deploy, then open the Render shell and run `python -m db.seed` once
 6. Copy your Render URL (e.g. https://carecompass-api.onrender.com)
 

@@ -71,6 +71,11 @@ def generate_gemini_content(
         automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
         temperature=0.2,
         max_output_tokens=512,
+        # Thinking models spend part of max_output_tokens on hidden reasoning
+        # before the visible reply — with a short reply budget that can
+        # consume the whole cap and return empty text. These replies are
+        # short, low-stakes explanations, not tasks that need deliberation.
+        thinking_config=types.ThinkingConfig(thinking_budget=0),
     )
 
     try:
