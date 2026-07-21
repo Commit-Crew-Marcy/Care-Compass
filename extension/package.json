@@ -1,9 +1,9 @@
 {
   "name": "carecompass-browser-guide",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "scripts": {
     "test": "node --test tests/*.test.js",
-    "check": "node --check background.js && node --check content.js && node --check popup/popup.js && node --test tests/*.test.js"
+    "check": "node --check background.js && node --check content.js && node --check popup/popup.js && node --check options/options.js && node --test tests/*.test.js"
   }
 }

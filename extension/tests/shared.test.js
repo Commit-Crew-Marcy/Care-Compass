@@ -3,8 +3,10 @@ const assert = require('node:assert/strict')
 
 const {
   isSafeClickDescriptor,
+  isLocalPageUrl,
   isSupportedPageUrl,
   preparePageText,
+  selectApiBase,
   validateRequestedAction,
 } = require('../shared.js')
 
@@ -13,6 +15,24 @@ test('only regular web pages are supported', () => {
   assert.equal(isSupportedPageUrl('http://localhost:5173/results'), true)
   assert.equal(isSupportedPageUrl('chrome://extensions'), false)
   assert.equal(isSupportedPageUrl('file:///tmp/private.txt'), false)
+})
+
+test('all localhost development ports use the local backend', () => {
+  assert.equal(isLocalPageUrl('http://localhost:5176/questionnaire'), true)
+  assert.equal(isLocalPageUrl('http://127.0.0.1:5199/results'), true)
+  assert.equal(isLocalPageUrl('https://localhost:5176/results'), false)
+  assert.equal(isLocalPageUrl('https://care-compass-three.vercel.app/results'), false)
+})
+
+test('developer connection mode can use localhost on an external website', () => {
+  const local = 'http://localhost:8000'
+  const production = 'https://api.example.com'
+  const externalPage = 'https://www.healthcare.gov/'
+
+  assert.equal(selectApiBase('local', externalPage, local, production), local)
+  assert.equal(selectApiBase('production', externalPage, local, production), production)
+  assert.equal(selectApiBase('automatic', externalPage, local, production), production)
+  assert.equal(selectApiBase('automatic', 'http://localhost:5176/', local, production), local)
 })
 
 test('page text is shortened and common sensitive values are removed', () => {

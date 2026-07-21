@@ -1,9 +1,9 @@
-"""POST /api/ai/chat — proxies user questions to the Anthropic API.
+"""AI routes for the website guide and Chrome extension.
 
-The system prompt is built SERVER-SIDE and never varies with user input —
-raw user input and the page context are only ever placed in the user
-message, never concatenated into the system prompt. The API key lives in
-the ANTHROPIC_API_KEY environment variable and never reaches the frontend.
+The website guide keeps its existing Anthropic integration. The browser
+extension uses Gemini through GEMINI_API_KEY. Both keys remain server-side.
+System prompts are server-owned; user input and page context are passed only
+as user content.
 
 The assistant may request at most one safe UI action via the single
 `suggest_action` tool. The model's tool call is a suggestion only: every
@@ -28,6 +28,11 @@ from models.schemas import (
     ExtensionChatResponse,
     ExtensionPageContext,
     PageContext,
+)
+from services.gemini import (
+    DEFAULT_GEMINI_MODEL,
+    GeminiServiceError,
+    generate_gemini_content,
 )
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
@@ -148,6 +153,8 @@ EXTENSION_ALLOWED_ACTION_TYPES = {
 EXTENSION_SYSTEM_PROMPT = """You are the CareCompass Browser Guide. You help older adults and people with limited technical experience understand and navigate benefits, insurance, health-care, and government websites.
 
 Use calm, respectful, plain language. Keep sentences and paragraphs short. Explain one idea at a time. Avoid jargon. When the user asks what to do next, give at most 3 short numbered steps. For yes-or-no questions, begin with "Yes" or "No" when the page provides enough information.
+
+When asked to explain or summarize a page, begin with one sentence that says what the page is for. Then give only the most important facts. Do not repeat menus, footers, or legal boilerplate unless it changes what the user should do. End with one clear next step when the page provides one.
 
 Use only the filtered, visible page context supplied with the question. Say when the visible information is incomplete. Never claim that someone definitely qualifies for a benefit, coverage, or payment. The official agency makes the final decision.
 
@@ -387,51 +394,28 @@ def extension_chat(body: ExtensionChatRequest):
     if not body.page_context.url.startswith(("http://", "https://")):
         raise HTTPException(status_code=422, detail="Only regular web pages are supported.")
 
-    api_key = os.getenv("ANTHROPIC_API_KEY")
+    api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
         raise HTTPException(status_code=503, detail=UNAVAILABLE_MESSAGE)
 
     try:
-        import anthropic
-    except ImportError:
-        raise HTTPException(status_code=503, detail=UNAVAILABLE_MESSAGE)
-
-    system_prompt = EXTENSION_SYSTEM_PROMPT + MODE_INSTRUCTIONS.get(
-        body.response_mode, MODE_INSTRUCTIONS["simple"]
-    )
-
-    try:
-        client = anthropic.Anthropic(api_key=api_key)
-        response = client.messages.create(
-            model=MODEL,
-            max_tokens=1024,
-            system=system_prompt,
-            tools=[EXTENSION_ACTION_TOOL],
-            messages=[{"role": "user", "content": build_extension_user_content(body)}],
+        message_text, raw_action = generate_gemini_content(
+            api_key=api_key,
+            model=os.getenv("GEMINI_MODEL", DEFAULT_GEMINI_MODEL),
+            system_prompt=EXTENSION_SYSTEM_PROMPT + MODE_INSTRUCTIONS.get(
+                body.response_mode, MODE_INSTRUCTIONS["simple"]
+            ),
+            user_content=build_extension_user_content(body),
+            tool_definition=EXTENSION_ACTION_TOOL,
         )
-    except anthropic.APIError:
+    except GeminiServiceError:
         raise HTTPException(status_code=503, detail=UNREACHABLE_MESSAGE)
 
-    message_text = "".join(
-        block.text for block in response.content if block.type == "text"
-    ).strip()
-    tool_block = next(
-        (
-            block
-            for block in response.content
-            if block.type == "tool_use" and block.name == "suggest_extension_action"
-        ),
-        None,
-    )
-    action = (
-        validate_extension_action(tool_block.input, body.page_context)
-        if tool_block
-        else None
-    )
+    action = validate_extension_action(raw_action, body.page_context) if raw_action else None
 
-    if tool_block is not None and action is None:
+    if raw_action is not None and action is None:
         logger.warning(
-            "Rejected extension AI action of type=%r", tool_block.input.get("type")
+            "Rejected extension AI action of type=%r", raw_action.get("type")
         )
         message_text = ACTION_REJECTED_MESSAGE
     elif action is not None and not message_text:

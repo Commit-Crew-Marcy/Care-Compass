@@ -10,4 +10,7 @@ test('manifest uses temporary active-tab access instead of every-site access', (
   assert.ok(manifest.permissions.includes('scripting'))
   assert.equal(manifest.host_permissions.includes('<all_urls>'), false)
   assert.equal(manifest.action.default_popup, 'popup/popup.html')
+  assert.equal(manifest.options_ui.page, 'options/options.html')
+  assert.ok(manifest.content_scripts[0].matches.includes('http://localhost/*'))
+  assert.ok(manifest.content_scripts[0].matches.includes('http://127.0.0.1/*'))
 })

@@ -1,6 +1,6 @@
 """Tests for the senior-friendly CareCompass AI Guide (POST /api/ai/chat).
 
-These focus on what can be tested without a live Anthropic API call: the
+These focus on what can be tested without a live Anthropic or Gemini API call: the
 action allowlist, page-context validation, and response-length enforcement
 are pure functions, so they're exercised directly. The missing-API-key path
 is exercised through the real endpoint since it never reaches the network.
@@ -228,7 +228,8 @@ def extension_context(allowed_actions=None):
 
 
 def test_extension_missing_api_key_returns_graceful_503(client, monkeypatch):
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "website-key-is-not-the-extension-key")
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     response = client.post(
         "/api/ai/extension/chat",
         json={
@@ -241,7 +242,7 @@ def test_extension_missing_api_key_returns_graceful_503(client, monkeypatch):
 
 
 def test_extension_rejects_non_web_page_url(client, monkeypatch):
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     context = extension_context().model_dump(by_alias=True)
     context["url"] = "chrome://extensions"
     response = client.post(
@@ -286,3 +287,57 @@ def test_extension_tool_schema_only_exposes_safe_navigation_actions():
         "click_element",
         "go_back",
     }
+
+
+def test_extension_uses_gemini_and_returns_a_revalidated_action(client, monkeypatch):
+    captured = {}
+
+    def fake_generate(**kwargs):
+        captured.update(kwargs)
+        return (
+            "This page explains benefits. I can move to Learn more.",
+            {"type": "scroll_to_element", "target": "cc-element-1"},
+        )
+
+    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
+    monkeypatch.setenv("GEMINI_MODEL", "test-gemini-model")
+    monkeypatch.setattr("routers.ai.generate_gemini_content", fake_generate)
+
+    response = client.post(
+        "/api/ai/extension/chat",
+        json={
+            "question": "What does this page do?",
+            "pageContext": extension_context().model_dump(by_alias=True),
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["message"].startswith("This page explains benefits.")
+    assert response.json()["action"] == {
+        "type": "scroll_to_element",
+        "target": "cc-element-1",
+        "requiresConfirmation": False,
+    }
+    assert captured["api_key"] == "test-gemini-key"
+    assert captured["model"] == "test-gemini-model"
+    assert captured["tool_definition"]["name"] == "suggest_extension_action"
+
+
+def test_extension_rejects_an_unsafe_gemini_action(client, monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
+    monkeypatch.setattr(
+        "routers.ai.generate_gemini_content",
+        lambda **kwargs: ("I will submit it.", {"type": "submit_form"}),
+    )
+
+    response = client.post(
+        "/api/ai/extension/chat",
+        json={
+            "question": "Submit this form for me.",
+            "pageContext": extension_context().model_dump(by_alias=True),
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["message"] == "I cannot perform that action, but I can explain how to do it."
+    assert response.json()["action"] is None

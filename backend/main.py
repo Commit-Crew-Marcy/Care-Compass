@@ -8,6 +8,9 @@ Interactive docs: http://localhost:8000/docs
 """
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from db.database import Base, engine
 from routers import ai, auth, benefits, eligibility, nyc_benefits, screenings
