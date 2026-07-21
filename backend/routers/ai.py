@@ -1,9 +1,8 @@
 """AI routes for the website guide and Chrome extension.
 
-The website guide keeps its existing Anthropic integration. The browser
-extension uses Gemini through GEMINI_API_KEY. Both keys remain server-side.
-System prompts are server-owned; user input and page context are passed only
-as user content.
+Both the website guide and the browser extension run on Gemini through
+GEMINI_API_KEY. The key remains server-side. System prompts are server-owned;
+user input and page context are passed only as user content.
 
 The assistant may request at most one safe UI action via the single
 `suggest_action` tool. The model's tool call is a suggestion only: every
@@ -37,9 +36,6 @@ from services.gemini import (
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
 logger = logging.getLogger(__name__)
-
-# Kept unchanged from the existing integration — not part of this feature.
-MODEL = "claude-sonnet-4-6"
 
 UNAVAILABLE_MESSAGE = (
     "CareCompass Guide is temporarily unavailable. You can still use the "
@@ -338,44 +334,34 @@ def build_extension_user_content(body: ExtensionChatRequest) -> str:
 
 @router.post("/chat", response_model=ChatResponse, response_model_by_alias=True)
 def chat(body: ChatRequest):
-    api_key = os.getenv("ANTHROPIC_API_KEY")
+    api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
-        raise HTTPException(status_code=503, detail=UNAVAILABLE_MESSAGE)
-
-    try:
-        import anthropic
-    except ImportError:
         raise HTTPException(status_code=503, detail=UNAVAILABLE_MESSAGE)
 
     system_prompt = BASE_SYSTEM_PROMPT + MODE_INSTRUCTIONS.get(body.response_mode, MODE_INSTRUCTIONS["simple"])
     user_content = build_user_content(body)
 
     try:
-        client = anthropic.Anthropic(api_key=api_key)
-        response = client.messages.create(
-            model=MODEL,
-            max_tokens=1024,
-            system=system_prompt,
-            tools=[ACTION_TOOL],
-            messages=[{"role": "user", "content": user_content}],
+        message_text, raw_action = generate_gemini_content(
+            api_key=api_key,
+            model=os.getenv("GEMINI_MODEL", DEFAULT_GEMINI_MODEL),
+            system_prompt=system_prompt,
+            user_content=user_content,
+            tool_definition=ACTION_TOOL,
         )
-    except anthropic.APIError:
+    except GeminiServiceError:
         raise HTTPException(status_code=503, detail=UNREACHABLE_MESSAGE)
 
-    message_text = "".join(block.text for block in response.content if block.type == "text").strip()
-    tool_block = next(
-        (block for block in response.content if block.type == "tool_use" and block.name == "suggest_action"),
-        None,
-    )
-    action = validate_action(tool_block.input, body.page_context) if tool_block else None
+    action = validate_action(raw_action, body.page_context) if raw_action else None
 
-    if tool_block is not None and action is None:
-        rejected_type = tool_block.input.get("type")
-        logger.warning("Rejected AI-suggested action of type=%r", rejected_type)
-        if rejected_type in ("scroll_to_element", "focus_element"):
+    if raw_action is not None and action is None:
+        logger.warning("Rejected AI-suggested action of type=%r", raw_action.get("type"))
+        if raw_action.get("type") in ("scroll_to_element", "focus_element"):
             message_text = NOT_FOUND_MESSAGE
         else:
             message_text = ACTION_REJECTED_MESSAGE
+    elif action is not None and not message_text:
+        message_text = "I found that item on this page."
 
     max_words, max_steps = MODE_LIMITS.get(body.response_mode, MODE_LIMITS["simple"])
     message_text = enforce_step_limit(message_text, max_steps)
