@@ -174,7 +174,14 @@ curl -X POST http://localhost:8000/api/eligibility/check \
 - [x] User authentication: register, login, logout, profile (GET /api/auth/me)
 - [x] User-generated resource with full CRUD: saved screenings
 - [x] GitHub repo with README containing the product spec
-- [ ] Deployment link (add after deploying): YOUR_LINK_HERE
+- [x] Deployment link: https://care-compass-three.vercel.app (frontend, Vercel)
+
+**Backend deployment is currently down.** The Render service referenced in
+`extension/manifest.json` (https://care-compass-4gi5.onrender.com) returns 404
+on every route as of 2026-07-21 — it needs to be redeployed (or a new service
+created) following the Render steps above before the deployed frontend or the
+Chrome extension's Automatic mode will work end to end. Local development
+against `http://localhost:8000` is unaffected.
 
 ## Notes
 
