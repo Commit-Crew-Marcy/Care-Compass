@@ -46,6 +46,22 @@
     }
   }
 
+  function isLocalPageUrl(value) {
+    try {
+      const url = new URL(value)
+      return url.protocol === 'http:'
+        && (url.hostname === 'localhost' || url.hostname === '127.0.0.1')
+    } catch {
+      return false
+    }
+  }
+
+  function selectApiBase(mode, pageUrl, localBase, productionBase) {
+    if (mode === 'local') return localBase
+    if (mode === 'production') return productionBase
+    return isLocalPageUrl(pageUrl) ? localBase : productionBase
+  }
+
   function isSafeClickDescriptor(descriptor) {
     if (!descriptor || typeof descriptor !== 'object') return false
     const label = cleanText(descriptor.label, 180)
@@ -100,9 +116,11 @@
     MAX_PAGE_TEXT_LENGTH,
     cleanText,
     isSafeClickDescriptor,
+    isLocalPageUrl,
     isSupportedPageUrl,
     preparePageText,
     redactSensitiveText,
+    selectApiBase,
     validateRequestedAction,
   })
 })

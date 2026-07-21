@@ -165,7 +165,7 @@ async function sendQuestion(rawQuestion) {
 
   try {
     const result = await callChrome((done) => chrome.runtime.sendMessage({
-      type: 'CARE_COMPASS_ASK_CLAUDE',
+      type: 'CARE_COMPASS_ASK_GEMINI',
       question,
       pageContext,
       responseMode: responseMode(),

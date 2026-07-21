@@ -7,7 +7,8 @@ short, plain language and helps the user find safe next steps.
 
 - Reads visible page text only after the user opens the extension.
 - Sends a filtered semantic page summary to the CareCompass FastAPI backend.
-- Uses the server's Anthropic API key; the key is never stored in Chrome.
+- Uses Gemini through the CareCompass backend; the Gemini key is never stored
+  in Chrome or sent to a website.
 - Can scroll to or focus a visible control.
 - Can select a safe navigation link or non-form button only after the user
   confirms. It will not fill or submit forms, apply for benefits, enter
@@ -21,16 +22,20 @@ the user leaves the site.
 
 ## Run locally
 
-1. Start the backend from `backend/` and set `ANTHROPIC_API_KEY` in the backend
-   environment.
+1. Copy `backend/.env.example` to `backend/.env`, set `GEMINI_API_KEY`, and
+   start the backend. `GEMINI_MODEL` is optional and defaults to
+   `gemini-3.5-flash`.
 2. Start the CareCompass frontend on `http://localhost:5173`.
 3. Open `chrome://extensions` in Chrome.
 4. Turn on **Developer mode**.
 5. Select **Load unpacked** and choose this `extension/` folder.
-6. Pin **CareCompass Browser Guide**, open a regular website, and select it.
+6. On the extension card, select **Details → Extension options → Local
+   development**. This lets an external benefits website use your local API.
+7. Pin **CareCompass Browser Guide**, open a regular website, and select it.
 
-When used on a local CareCompass frontend (ports 5173–5175), the extension calls
-`http://localhost:8000`. On other sites it calls the deployed CareCompass API.
+When used on a localhost page, the extension calls `http://localhost:8000`.
+On other sites, Automatic mode calls the deployed CareCompass API. The
+developer option can explicitly use localhost while testing external sites.
 
 ## Checks
 
@@ -45,7 +50,7 @@ Before publishing to the Chrome Web Store:
 
 1. Add store icons and screenshots.
 2. Publish a privacy policy that explains the visible-page text sent to the
-   CareCompass backend and Anthropic.
+   CareCompass backend and Google Gemini.
 3. Verify the production backend URL in `manifest.json` and `background.js`.
 4. Zip the contents of this directory (with `manifest.json` at the zip root).
 5. Put the final Chrome Web Store URL in the frontend environment variable
