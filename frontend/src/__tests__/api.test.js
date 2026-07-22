@@ -2,7 +2,7 @@ import { ELIGIBILITY_REQUEST_TIMEOUT_MS, getBenefit, resolveApiBase } from '../a
 
 describe('resolveApiBase', () => {
   it('uses the Render URL in production when VITE_API_BASE_URL is absent', () => {
-    expect(resolveApiBase(undefined, false)).toBe('https://care-compass-4gi5.onrender.com')
+    expect(resolveApiBase(undefined, false)).toBe('https://care-compass-4gj5.onrender.com')
   })
 
   it('uses localhost in development when VITE_API_BASE_URL is absent', () => {

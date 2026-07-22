@@ -175,12 +175,13 @@ curl -X POST http://localhost:8000/api/eligibility/check \
 - [x] GitHub repo with README containing the product spec
 - [x] Deployment link: https://care-compass-three.vercel.app (frontend, Vercel)
 
-**Backend deployment is currently down.** The Render service referenced in
-`extension/manifest.json` (https://care-compass-4gi5.onrender.com) returns 404
-on every route as of 2026-07-21 — it needs to be redeployed (or a new service
-created) following the Render steps above before the deployed frontend or the
-Chrome extension's Automatic mode will work end to end. Local development
-against `http://localhost:8000` is unaffected.
+**Backend deployment note.** The Render service was recreated and is now live at
+https://care-compass-4gj5.onrender.com (replacing the old, now-dead
+`care-compass-4gi5` URL referenced in earlier commits). The API responds
+correctly, but its database has not been seeded yet — run `python -m db.seed`
+from the Render dashboard's Shell tab for this service before the deployed
+frontend or the Chrome extension's Automatic mode will return any benefits.
+Local development against `http://localhost:8000` is unaffected.
 
 ## Notes
 

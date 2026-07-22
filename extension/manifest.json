@@ -15,7 +15,7 @@
   ],
   "host_permissions": [
     "http://localhost:8000/*",
-    "https://care-compass-4gi5.onrender.com/*"
+    "https://care-compass-4gj5.onrender.com/*"
   ],
   "background": {
     "service_worker": "background.js"
