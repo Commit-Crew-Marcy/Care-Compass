@@ -6,11 +6,14 @@ Run from the backend/ folder:
 
 Interactive docs: http://localhost:8000/docs
 """
+import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
 load_dotenv()
+logging.basicConfig(level=logging.INFO)
 
 from db.database import Base, engine
 from db.seed import seed

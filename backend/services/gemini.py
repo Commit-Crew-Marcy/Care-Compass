@@ -4,8 +4,10 @@ The browser extension sends an already-filtered semantic page summary. This
 module sends that text to Gemini and returns only model text plus one optional
 function-call payload. It never executes the requested browser action.
 """
+import logging
 from typing import Optional, Tuple
 
+logger = logging.getLogger(__name__)
 
 DEFAULT_GEMINI_MODEL = "gemini-3.5-flash"
 
@@ -86,8 +88,10 @@ def generate_gemini_content(
                 config=config,
             )
     except errors.APIError as exc:
+        logger.error(f"Gemini call failed: {exc}")
         raise GeminiServiceError("Gemini API request failed") from exc
     except OSError as exc:
+        logger.error(f"Gemini call failed: {exc}")
         raise GeminiServiceError("Gemini could not be reached") from exc
 
     return extract_gemini_response(response, tool_definition["name"])

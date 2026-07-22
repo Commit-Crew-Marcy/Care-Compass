@@ -349,7 +349,8 @@ def chat(body: ChatRequest):
             user_content=user_content,
             tool_definition=ACTION_TOOL,
         )
-    except GeminiServiceError:
+    except GeminiServiceError as exc:
+        logger.error(f"Gemini call failed: {exc}")
         raise HTTPException(status_code=503, detail=UNREACHABLE_MESSAGE)
 
     action = validate_action(raw_action, body.page_context) if raw_action else None
@@ -394,7 +395,8 @@ def extension_chat(body: ExtensionChatRequest):
             user_content=build_extension_user_content(body),
             tool_definition=EXTENSION_ACTION_TOOL,
         )
-    except GeminiServiceError:
+    except GeminiServiceError as exc:
+        logger.error(f"Gemini call failed: {exc}")
         raise HTTPException(status_code=503, detail=UNREACHABLE_MESSAGE)
 
     action = validate_extension_action(raw_action, body.page_context) if raw_action else None
