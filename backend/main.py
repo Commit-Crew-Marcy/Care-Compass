@@ -13,9 +13,11 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from db.database import Base, engine
+from db.seed import seed
 from routers import ai, auth, benefits, eligibility, nyc_benefits, screenings
 
 Base.metadata.create_all(bind=engine)
+seed()
 
 app = FastAPI(title="CareCompass API", version="0.2.0")
 
