@@ -6,8 +6,12 @@ function-call payload. It never executes the requested browser action.
 """
 from typing import Optional, Tuple
 
+import httpx
 
-DEFAULT_GEMINI_MODEL = "gemini-3.5-flash"
+
+DEFAULT_GEMINI_MODEL = "gemini-3.1-flash-lite"
+DEFAULT_GEMINI_FALLBACK_MODEL = "gemini-3-flash-preview"
+GEMINI_TIMEOUT_MS = 10_000
 
 
 class GeminiServiceError(RuntimeError):
@@ -51,6 +55,7 @@ def generate_gemini_content(
     system_prompt: str,
     user_content: str,
     tool_definition: dict,
+    fallback_model: Optional[str] = DEFAULT_GEMINI_FALLBACK_MODEL,
 ) -> Tuple[str, Optional[dict]]:
     """Generate one concise answer and, optionally, one unexecuted tool call."""
     try:
@@ -74,15 +79,34 @@ def generate_gemini_content(
     )
 
     try:
-        with genai.Client(api_key=api_key) as client:
-            response = client.models.generate_content(
-                model=model,
-                contents=user_content,
-                config=config,
-            )
+        # The SDK otherwise retries up to five times with no request timeout.
+        # Keep this below the extension's own timeout so callers receive a
+        # useful error instead of waiting indefinitely.
+        http_options = types.HttpOptions(
+            timeout=GEMINI_TIMEOUT_MS,
+            retry_options=types.HttpRetryOptions(attempts=1),
+        )
+        models = [model]
+        if fallback_model and fallback_model != model:
+            models.append(fallback_model)
+
+        with genai.Client(api_key=api_key, http_options=http_options) as client:
+            for index, candidate_model in enumerate(models):
+                try:
+                    response = client.models.generate_content(
+                        model=candidate_model,
+                        contents=user_content,
+                        config=config,
+                    )
+                    break
+                except errors.APIError as exc:
+                    has_fallback = index + 1 < len(models)
+                    if exc.code == 503 and has_fallback:
+                        continue
+                    raise
     except errors.APIError as exc:
         raise GeminiServiceError("Gemini API request failed") from exc
-    except OSError as exc:
+    except (httpx.NetworkError, httpx.TimeoutException, OSError) as exc:
         raise GeminiServiceError("Gemini could not be reached") from exc
 
     return extract_gemini_response(response, tool_definition["name"])

@@ -135,9 +135,11 @@ No code changes needed — `db/database.py` reads the env var.
 
 Copy `backend/.env.example` to `backend/.env`. Set `ANTHROPIC_API_KEY` for the
 website's floating assistant and `GEMINI_API_KEY` for the Chrome Browser Guide.
-The extension defaults to the stable `gemini-3.5-flash` model; override it with
-`GEMINI_MODEL` if needed. Keys remain on the backend and must never be placed
-in extension JavaScript or `manifest.json`.
+The extension defaults to the low-latency `gemini-3.1-flash-lite` model;
+override it with `GEMINI_MODEL` if needed. If that model is temporarily busy,
+the backend falls back to `gemini-3-flash-preview`; `GEMINI_FALLBACK_MODEL` can
+override it. Keys remain on the backend and must never be placed in extension
+JavaScript or `manifest.json`.
 
 ## Testing the API directly
 

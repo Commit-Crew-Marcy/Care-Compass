@@ -219,6 +219,12 @@ questionForm.addEventListener('submit', (event) => {
   sendQuestion(questionInput.value)
 })
 
+questionInput.addEventListener('keydown', (event) => {
+  if (event.key !== 'Enter' || event.shiftKey || event.isComposing) return
+  event.preventDefault()
+  questionForm.requestSubmit()
+})
+
 document.querySelectorAll('.suggestion').forEach((button) => {
   button.addEventListener('click', () => sendQuestion(button.dataset.question))
 })
