@@ -24,7 +24,8 @@ the user leaves the site.
 
 1. Copy `backend/.env.example` to `backend/.env`, set `GEMINI_API_KEY`, and
    start the backend. `GEMINI_MODEL` is optional and defaults to
-   `gemini-3.5-flash`.
+   the low-latency `gemini-3.1-flash-lite`; temporary overloads fall back to
+   `gemini-3-flash-preview`.
 2. Start the CareCompass frontend on `http://localhost:5173`.
 3. Open `chrome://extensions` in Chrome.
 4. Turn on **Developer mode**.

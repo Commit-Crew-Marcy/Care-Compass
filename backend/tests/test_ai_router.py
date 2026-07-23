@@ -9,11 +9,12 @@ import pytest
 from fastapi.testclient import TestClient
 
 from main import app
-from models.schemas import ExtensionPageContext, PageContext
+from models.schemas import ExtensionChatRequest, ExtensionPageContext, PageContext
 from routers.ai import (
     ACTION_TOOL,
     EXTENSION_ACTION_TOOL,
     UNAVAILABLE_MESSAGE,
+    build_extension_user_content,
     enforce_step_limit,
     enforce_word_limit,
     is_approved_route,
@@ -341,6 +342,23 @@ def test_extension_tool_schema_only_exposes_safe_navigation_actions():
     }
 
 
+def test_extension_prompt_emphasizes_the_current_answer_mode_over_history():
+    body = ExtensionChatRequest(
+        question="Why do I need to enter my age?",
+        response_mode="more_detail",
+        page_context=extension_context(),
+        history=[
+            {"role": "assistant", "text": "A shorter answer from Simple mode."}
+        ],
+    )
+
+    content = build_extension_user_content(body)
+
+    assert "Answer mode for this turn: MORE DETAIL" in content
+    assert "even if recent history used a different mode" in content
+    assert "A shorter answer from Simple mode." in content
+
+
 def test_extension_uses_gemini_and_returns_a_revalidated_action(client, monkeypatch):
     captured = {}
 
@@ -372,6 +390,7 @@ def test_extension_uses_gemini_and_returns_a_revalidated_action(client, monkeypa
     }
     assert captured["api_key"] == "test-gemini-key"
     assert captured["model"] == "test-gemini-model"
+    assert captured["fallback_model"] == "gemini-3-flash-preview"
     assert captured["tool_definition"]["name"] == "suggest_extension_action"
 
 
