@@ -1,4 +1,5 @@
 """Pure response-parsing tests for the Gemini adapter."""
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -136,6 +137,43 @@ def test_uses_fallback_model_when_primary_model_is_busy(monkeypatch):
         def __init__(self, api_key, http_options):
             self.models = FakeModels()
 
+
+def _call_generate_gemini_content():
+    return generate_gemini_content(
+        api_key="test-key",
+        model="test-model",
+        system_prompt="Use short sentences.",
+        user_content="Explain this page.",
+        tool_definition={
+            "name": "suggest_extension_action",
+            "description": "Suggest one safe action.",
+            "input_schema": {
+                "type": "object",
+                "properties": {"type": {"type": "string"}},
+                "required": ["type"],
+            },
+        },
+    )
+
+
+def test_retries_on_503_unavailable_and_succeeds_on_a_later_attempt(monkeypatch):
+    from google import genai
+    from google.genai import errors
+
+    fake_response = response_with(texts=("Recovered after overload.",))
+    call_count = {"n": 0}
+
+    class FlakyModels:
+        def generate_content(self, **kwargs):
+            call_count["n"] += 1
+            if call_count["n"] < 3:
+                raise errors.ServerError(503, {"status": "UNAVAILABLE", "message": "overloaded"})
+            return fake_response
+
+    class FakeClient:
+        def __init__(self, api_key):
+            self.models = FlakyModels()
+
         def __enter__(self):
             return self
 
@@ -162,3 +200,108 @@ def test_uses_fallback_model_when_primary_model_is_busy(monkeypatch):
     assert text == "The fallback worked."
     assert action is None
     assert requested_models == ["busy-model", DEFAULT_GEMINI_FALLBACK_MODEL]
+    sleep_calls = []
+    monkeypatch.setattr(genai, "Client", FakeClient)
+    monkeypatch.setattr(time, "sleep", lambda seconds: sleep_calls.append(seconds))
+
+    text, _ = _call_generate_gemini_content()
+
+    assert text == "Recovered after overload."
+    assert call_count["n"] == 3
+    assert sleep_calls == [2, 4]
+
+
+def test_gives_up_after_three_attempts_on_persistent_503(monkeypatch):
+    from google import genai
+    from google.genai import errors
+
+    call_count = {"n": 0}
+
+    class AlwaysOverloadedModels:
+        def generate_content(self, **kwargs):
+            call_count["n"] += 1
+            raise errors.ServerError(503, {"status": "UNAVAILABLE", "message": "overloaded"})
+
+    class FakeClient:
+        def __init__(self, api_key):
+            self.models = AlwaysOverloadedModels()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+    sleep_calls = []
+    monkeypatch.setattr(genai, "Client", FakeClient)
+    monkeypatch.setattr(time, "sleep", lambda seconds: sleep_calls.append(seconds))
+
+    with pytest.raises(GeminiServiceError):
+        _call_generate_gemini_content()
+
+    assert call_count["n"] == 3
+    assert sleep_calls == [2, 4]
+
+
+def test_does_not_retry_on_401_unauthenticated(monkeypatch):
+    from google import genai
+    from google.genai import errors
+
+    call_count = {"n": 0}
+
+    class BadKeyModels:
+        def generate_content(self, **kwargs):
+            call_count["n"] += 1
+            raise errors.ClientError(401, {"status": "UNAUTHENTICATED", "message": "bad key"})
+
+    class FakeClient:
+        def __init__(self, api_key):
+            self.models = BadKeyModels()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+    sleep_calls = []
+    monkeypatch.setattr(genai, "Client", FakeClient)
+    monkeypatch.setattr(time, "sleep", lambda seconds: sleep_calls.append(seconds))
+
+    with pytest.raises(GeminiServiceError):
+        _call_generate_gemini_content()
+
+    assert call_count["n"] == 1
+    assert sleep_calls == []
+
+
+def test_does_not_retry_on_429_quota_exceeded(monkeypatch):
+    from google import genai
+    from google.genai import errors
+
+    call_count = {"n": 0}
+
+    class QuotaExceededModels:
+        def generate_content(self, **kwargs):
+            call_count["n"] += 1
+            raise errors.ClientError(429, {"status": "RESOURCE_EXHAUSTED", "message": "quota"})
+
+    class FakeClient:
+        def __init__(self, api_key):
+            self.models = QuotaExceededModels()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+    sleep_calls = []
+    monkeypatch.setattr(genai, "Client", FakeClient)
+    monkeypatch.setattr(time, "sleep", lambda seconds: sleep_calls.append(seconds))
+
+    with pytest.raises(GeminiServiceError):
+        _call_generate_gemini_content()
+
+    assert call_count["n"] == 1
+    assert sleep_calls == []

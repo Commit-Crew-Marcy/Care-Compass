@@ -1,7 +1,7 @@
 importScripts('shared.js')
 
 const LOCAL_API_BASE = 'http://localhost:8000'
-const PRODUCTION_API_BASE = 'https://care-compass-4gi5.onrender.com'
+const PRODUCTION_API_BASE = 'https://care-compass-4gj5.onrender.com'
 const EXTENSION_CHAT_PATH = '/api/ai/extension/chat'
 const RETRYABLE_STATUSES = new Set([502, 503, 504])
 

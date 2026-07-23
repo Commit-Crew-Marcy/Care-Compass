@@ -4,6 +4,8 @@ The browser extension sends an already-filtered semantic page summary. This
 module sends that text to Gemini and returns only model text plus one optional
 function-call payload. It never executes the requested browser action.
 """
+import logging
+import time
 from typing import Optional, Tuple
 
 import httpx
@@ -12,6 +14,13 @@ import httpx
 DEFAULT_GEMINI_MODEL = "gemini-3.1-flash-lite"
 DEFAULT_GEMINI_FALLBACK_MODEL = "gemini-3-flash-preview"
 GEMINI_TIMEOUT_MS = 10_000
+
+# Only a 503/UNAVAILABLE means Gemini is transiently overloaded and a retry
+# might succeed. Other errors (bad key, quota, malformed request) will fail
+# identically on every attempt, so they raise immediately instead of adding
+# latency for no benefit.
+MAX_ATTEMPTS = 3
+RETRY_DELAYS_SECONDS = (2, 4)
 
 
 class GeminiServiceError(RuntimeError):
@@ -76,6 +85,11 @@ def generate_gemini_content(
         automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
         temperature=0.2,
         max_output_tokens=512,
+        # Thinking models spend part of max_output_tokens on hidden reasoning
+        # before the visible reply — with a short reply budget that can
+        # consume the whole cap and return empty text. These replies are
+        # short, low-stakes explanations, not tasks that need deliberation.
+        thinking_config=types.ThinkingConfig(thinking_budget=0),
     )
 
     try:
@@ -108,5 +122,29 @@ def generate_gemini_content(
         raise GeminiServiceError("Gemini API request failed") from exc
     except (httpx.NetworkError, httpx.TimeoutException, OSError) as exc:
         raise GeminiServiceError("Gemini could not be reached") from exc
+    response = None
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        try:
+            with genai.Client(api_key=api_key) as client:
+                response = client.models.generate_content(
+                    model=model,
+                    contents=user_content,
+                    config=config,
+                )
+            break
+        except errors.APIError as exc:
+            is_overloaded = exc.code == 503 or exc.status == "UNAVAILABLE"
+            if not is_overloaded or attempt == MAX_ATTEMPTS:
+                logger.error(f"Gemini call failed: {exc}")
+                raise GeminiServiceError("Gemini API request failed") from exc
+            delay = RETRY_DELAYS_SECONDS[attempt - 1]
+            logger.warning(
+                f"Gemini returned 503 UNAVAILABLE (attempt {attempt}/{MAX_ATTEMPTS}), "
+                f"retrying in {delay}s: {exc}"
+            )
+            time.sleep(delay)
+        except OSError as exc:
+            logger.error(f"Gemini call failed: {exc}")
+            raise GeminiServiceError("Gemini could not be reached") from exc
 
     return extract_gemini_response(response, tool_definition["name"])

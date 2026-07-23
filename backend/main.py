@@ -6,16 +6,21 @@ Run from the backend/ folder:
 
 Interactive docs: http://localhost:8000/docs
 """
+import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
 load_dotenv()
+logging.basicConfig(level=logging.INFO)
 
 from db.database import Base, engine
+from db.seed import seed
 from routers import ai, auth, benefits, eligibility, nyc_benefits, screenings
 
 Base.metadata.create_all(bind=engine)
+seed()
 
 app = FastAPI(title="CareCompass API", version="0.2.0")
 

@@ -32,16 +32,69 @@ def client():
 
 
 def test_missing_api_key_returns_graceful_503(client, monkeypatch):
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     r = client.post("/api/ai/chat", json={"question": "What is SNAP?"})
     assert r.status_code == 503
     assert r.json()["detail"] == UNAVAILABLE_MESSAGE
 
 
 def test_missing_question_is_rejected(client, monkeypatch):
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     r = client.post("/api/ai/chat", json={})
     assert r.status_code == 422
+
+
+def test_chat_uses_gemini_and_returns_a_revalidated_action(client, monkeypatch):
+    captured = {}
+
+    def fake_generate(**kwargs):
+        captured.update(kwargs)
+        return (
+            "This may be a possible match for SNAP.",
+            {"type": "scroll_to_element", "target": "continue-button"},
+        )
+
+    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
+    monkeypatch.setenv("GEMINI_MODEL", "test-gemini-model")
+    monkeypatch.setattr("routers.ai.generate_gemini_content", fake_generate)
+
+    response = client.post(
+        "/api/ai/chat",
+        json={
+            "question": "What should I do next?",
+            "pageContext": {
+                "route": "/questionnaire",
+                "visibleControls": [
+                    {"id": "continue-button", "type": "button", "label": "Continue"}
+                ],
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["message"].startswith("This may be a possible match")
+    assert response.json()["action"] == {
+        "type": "scroll_to_element",
+        "target": "continue-button",
+        "requiresConfirmation": False,
+    }
+    assert captured["api_key"] == "test-gemini-key"
+    assert captured["model"] == "test-gemini-model"
+    assert captured["tool_definition"]["name"] == "suggest_action"
+
+
+def test_chat_rejects_an_unsafe_gemini_action(client, monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
+    monkeypatch.setattr(
+        "routers.ai.generate_gemini_content",
+        lambda **kwargs: ("I will delete it.", {"type": "delete_screening", "target": "1"}),
+    )
+
+    response = client.post("/api/ai/chat", json={"question": "Delete my screening."})
+
+    assert response.status_code == 200
+    assert response.json()["message"] == "I cannot perform that action, but I can explain how to do it."
+    assert response.json()["action"] is None
 
 
 # ---------- approved routes ----------
@@ -229,7 +282,6 @@ def extension_context(allowed_actions=None):
 
 
 def test_extension_missing_api_key_returns_graceful_503(client, monkeypatch):
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "website-key-is-not-the-extension-key")
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     response = client.post(
         "/api/ai/extension/chat",

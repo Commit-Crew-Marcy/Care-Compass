@@ -6,7 +6,7 @@
 // talks to the deployed Render API. Exported as a pure function (instead
 // of reading import.meta.env inline) so it can be unit tested directly.
 export function resolveApiBase(envUrl, isDev) {
-  const raw = envUrl || (isDev ? 'http://localhost:8000' : 'https://care-compass-4gi5.onrender.com')
+  const raw = envUrl || (isDev ? 'http://localhost:8000' : 'https://care-compass-4gj5.onrender.com')
   return raw.replace(/\/+$/, '')
 }
 
