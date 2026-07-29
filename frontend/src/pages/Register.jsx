@@ -31,7 +31,7 @@ export default function Register() {
 
   return (
     <main className="auth-container">
-      <h1>Create your account</h1>
+      <h1 className="auth-heading">Create your account</h1>
       <p className="subtitle">Save your eligibility results and come back to them anytime.</p>
 
       <div className="auth-card">

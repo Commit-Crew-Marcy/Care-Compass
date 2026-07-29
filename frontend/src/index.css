@@ -1279,6 +1279,11 @@ form button.btn { margin-top: 6px; }
   padding: var(--space-6) 24px var(--space-8);
 }
 
+/* The global h1 clamp scales with viewport width, not this narrow
+   480px-wide column — at desktop widths it hit its 4rem ceiling and
+   "Create your account" wrapped to two lines. Sized to this column instead. */
+.auth-heading { font-size: clamp(1.5rem, 6vw, 1.875rem); margin-bottom: 6px; }
+
 /* The form itself now sits inside a real, richly-elevated card instead of
    floating bare on the page background. */
 .auth-card {

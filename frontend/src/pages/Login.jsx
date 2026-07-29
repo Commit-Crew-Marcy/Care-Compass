@@ -28,7 +28,7 @@ export default function Login() {
 
   return (
     <main className="auth-container">
-      <h1>Log in</h1>
+      <h1 className="auth-heading">Log in</h1>
       <p className="subtitle">Welcome back. Log in to see your saved screenings.</p>
 
       <div className="auth-card">
