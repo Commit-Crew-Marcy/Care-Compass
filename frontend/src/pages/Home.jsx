@@ -11,7 +11,7 @@ export default function Home() {
     () => ({
       route: '/',
       pageTitle: 'CareCompass',
-      heading: 'Find government benefits that may fit your situation',
+      heading: 'Find Government Benefits That May Fit Your Situation',
       sectionHeadings: ['How It Works', 'Clear rules, responsible AI'],
       visibleControls: [
         { id: 'find-my-benefits-button', type: 'button', label: 'Find my benefits' },
@@ -45,7 +45,7 @@ export default function Home() {
               Benefits can be difficult to understand. CareCompass makes the first step simpler.
             </p>
             <h1 className="home-heading">
-              Find government benefits that may fit your situation
+              Find Government Benefits That May Fit Your Situation
             </h1>
             <p className="home-desc">
               Answer a few simple questions to explore health coverage, food assistance,
