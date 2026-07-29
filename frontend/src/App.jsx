@@ -60,7 +60,7 @@ export default function App() {
             </button>
             {loggedIn ? (
               <>
-                <Link to="/screenings" onClick={closeMenu}>My Saved Results</Link>
+                <Link to="/screenings" onClick={closeMenu}>🔖 My Saved Results</Link>
                 <span className="nav-user">{user?.displayName || user?.email}</span>
                 <button className="nav-logout" onClick={handleLogout}>Log out</button>
               </>

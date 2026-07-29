@@ -66,7 +66,7 @@ export default function MyScreenings() {
 
   return (
     <main className="container">
-      <h1>My Saved Results</h1>
+      <h1>🔖 My Saved Results</h1>
       <p className="subtitle">Your past eligibility checks. Rename, review, or delete them.</p>
       {error && <div className="error-box">{error}</div>}
 
