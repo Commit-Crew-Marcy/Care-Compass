@@ -15,6 +15,11 @@ vi.mock('../api', () => ({
   checkEligibility: (...args) => checkEligibility(...args),
 }))
 
+beforeAll(() => {
+  // jsdom doesn't implement scrollIntoView
+  Element.prototype.scrollIntoView = vi.fn()
+})
+
 const ALLOWED_FIELDS = [
   'age', 'income', 'state', 'nycResident', 'helpCategories', 'householdSize', 'disabilityStatus', 'disabilityDetails',
   'veteranStatus', 'isPregnant', 'hasChildrenUnder18', 'hasChildrenUnder5',

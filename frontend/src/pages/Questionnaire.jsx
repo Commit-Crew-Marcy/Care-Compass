@@ -158,6 +158,8 @@ export default function Questionnaire() {
   const [loading, setLoading] = useState(false)
   const [waking, setWaking] = useState(false)
   const submitErrorRef = useRef(null)
+  const disabilityDetailsRef = useRef(null)
+  const coverageDetailsRef = useRef(null)
   const [childUnder5Error, setChildUnder5Error] = useState('')
   const [form, setForm] = useState({
     age: '',
@@ -189,6 +191,20 @@ export default function Questionnaire() {
   useEffect(() => {
     if (step === TOTAL_STEPS && error) submitErrorRef.current?.focus()
   }, [error, step])
+
+  // Selecting "Yes" reveals a follow-up section below the fold — scroll it
+  // into view so the user notices it instead of just seeing nothing happen.
+  useEffect(() => {
+    if (form.disabilityStatus === true) {
+      disabilityDetailsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    }
+  }, [form.disabilityStatus])
+
+  useEffect(() => {
+    if (form.insuranceStatus) {
+      coverageDetailsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    }
+  }, [form.insuranceStatus])
 
   const validationMessages = [error, ageError, incomeError, childUnder5Error].filter(Boolean)
 
@@ -575,7 +591,7 @@ export default function Questionnaire() {
 
           {/* ---- Optional detail section (revealed when Yes) ---- */}
           {form.disabilityStatus === true && (
-            <fieldset className="ds-detail-fieldset">
+            <fieldset className="ds-detail-fieldset" ref={disabilityDetailsRef}>
               <legend className="ds-detail-legend">
                 What best describes your situation?
               </legend>
@@ -750,7 +766,7 @@ export default function Questionnaire() {
           </label>
 
           {form.insuranceStatus && (
-            <>
+            <div ref={coverageDetailsRef}>
               <label style={{ marginTop: 16 }}>Select all insurance you currently have</label>
               <div className="chip-grid">
                 {COVERAGE_OPTIONS.map((opt) => {
@@ -796,7 +812,7 @@ export default function Questionnaire() {
                   </p>
                 </div>
               )}
-            </>
+            </div>
           )}
         </>
       )}

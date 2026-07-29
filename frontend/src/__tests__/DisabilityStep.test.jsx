@@ -17,6 +17,11 @@ vi.mock('../api', () => ({
   checkEligibility: vi.fn().mockResolvedValue([]),
 }))
 
+beforeAll(() => {
+  // jsdom doesn't implement scrollIntoView
+  Element.prototype.scrollIntoView = vi.fn()
+})
+
 // ---- helpers ----
 
 async function advanceToStep3(user) {

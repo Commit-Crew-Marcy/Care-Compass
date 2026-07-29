@@ -14,6 +14,11 @@ vi.mock('../api', () => ({
   checkEligibility: vi.fn().mockResolvedValue([]),
 }))
 
+beforeAll(() => {
+  // jsdom doesn't implement scrollIntoView
+  Element.prototype.scrollIntoView = vi.fn()
+})
+
 async function advanceToStep5(user) {
   await user.type(screen.getByLabelText(/your age/i), '45')
   await user.selectOptions(screen.getByLabelText(/your state/i), 'CT')
