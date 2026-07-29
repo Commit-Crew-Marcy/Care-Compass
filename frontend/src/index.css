@@ -746,7 +746,8 @@ form button.btn { margin-top: 6px; }
   padding: 14px 22px;
   font-size: 18px;
   font-weight: 700;
-  cursor: pointer;
+  cursor: grab;
+  touch-action: none;
   box-shadow: var(--shadow-glow-navy), var(--shadow-md);
   transition: transform var(--t-base), box-shadow var(--t-base), background-color var(--t-base);
 }
@@ -755,7 +756,7 @@ form button.btn { margin-top: 6px; }
   box-shadow: var(--shadow-glow-navy), var(--shadow-lg);
   transform: translateY(-3px) scale(1.02);
 }
-.chat-fab:active { transform: translateY(0) scale(1); transition-duration: var(--t-press); }
+.chat-fab:active { cursor: grabbing; transform: translateY(0) scale(1); transition-duration: var(--t-press); }
 
 .chat-panel {
   position: fixed;

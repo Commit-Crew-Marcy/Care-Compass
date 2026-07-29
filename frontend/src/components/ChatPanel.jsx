@@ -22,6 +22,29 @@ const PRIVACY_NOTICE = 'Do not enter passwords, SSNs, or ID numbers.'
 
 let nextMessageId = 1
 
+// Remembers where the user dragged the floating "Ask a question" button so
+// it stays put across reloads. Silently no-ops in private browsing / quota
+// errors — losing the remembered spot just means it falls back to default.
+const FAB_POSITION_KEY = 'cc_chat_fab_position'
+const DRAG_THRESHOLD_PX = 6
+
+function loadFabPosition() {
+  try {
+    const raw = localStorage.getItem(FAB_POSITION_KEY)
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
+function saveFabPosition(position) {
+  try {
+    localStorage.setItem(FAB_POSITION_KEY, JSON.stringify(position))
+  } catch {
+    // ignore
+  }
+}
+
 // Best-effort language guess for read-aloud, based on the script used in the
 // response text. Falls back to the browser's language. No dependency added.
 function guessSpeechLang(text) {
@@ -56,12 +79,15 @@ export default function ChatPanel() {
   const [responseMode, setResponseMode] = useState('simple')
   const [pendingAction, setPendingAction] = useState(null)
   const [speakingId, setSpeakingId] = useState(null)
+  const [fabPosition, setFabPosition] = useState(loadFabPosition)
 
   const bottomRef = useRef(null)
   const askButtonRef = useRef(null)
   const panelRef = useRef(null)
   const abortRef = useRef(null)
   const wasOpenRef = useRef(false)
+  const dragRef = useRef(null)
+  const draggedRef = useRef(false)
 
   const speechSupported = typeof window !== 'undefined' && 'speechSynthesis' in window
 
@@ -104,6 +130,28 @@ export default function ChatPanel() {
     document.addEventListener('keydown', onKeyDown)
     return () => document.removeEventListener('keydown', onKeyDown)
   }, [open])
+
+  // Keep a dragged button on-screen if the window shrinks (e.g. rotating a
+  // phone) after it was moved near an edge.
+  useEffect(() => {
+    const handleResize = () => {
+      setFabPosition((pos) => {
+        if (!pos || !askButtonRef.current) return pos
+        const rect = askButtonRef.current.getBoundingClientRect()
+        const maxLeft = Math.max(window.innerWidth - rect.width, 0)
+        const maxTop = Math.max(window.innerHeight - rect.height, 0)
+        const clamped = {
+          left: Math.min(Math.max(pos.left, 0), maxLeft),
+          top: Math.min(Math.max(pos.top, 0), maxTop),
+        }
+        if (clamped.left === pos.left && clamped.top === pos.top) return pos
+        saveFabPosition(clamped)
+        return clamped
+      })
+    }
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
 
   const recentHistory = useMemo(
     () => messages.slice(-6).map((m) => ({ role: m.role, text: m.text })),
@@ -192,6 +240,59 @@ export default function ChatPanel() {
     abortRef.current?.abort()
   }
 
+  // Lets the closed "Ask a question" button be dragged anywhere on screen.
+  // Pointer events cover mouse + touch in one path; a small movement
+  // threshold distinguishes a drag from a tap/click so the button still
+  // opens the chat on a plain click.
+  const handleFabPointerDown = (e) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    dragRef.current = {
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      originLeft: rect.left,
+      originTop: rect.top,
+      width: rect.width,
+      height: rect.height,
+    }
+    draggedRef.current = false
+    e.currentTarget.setPointerCapture?.(e.pointerId)
+  }
+
+  const handleFabPointerMove = (e) => {
+    const drag = dragRef.current
+    if (!drag) return
+    const dx = e.clientX - drag.startX
+    const dy = e.clientY - drag.startY
+    if (!draggedRef.current && Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return
+    draggedRef.current = true
+    const maxLeft = Math.max(window.innerWidth - drag.width, 0)
+    const maxTop = Math.max(window.innerHeight - drag.height, 0)
+    setFabPosition({
+      left: Math.min(Math.max(drag.originLeft + dx, 0), maxLeft),
+      top: Math.min(Math.max(drag.originTop + dy, 0), maxTop),
+    })
+  }
+
+  const handleFabPointerUp = (e) => {
+    if (dragRef.current) e.currentTarget.releasePointerCapture?.(dragRef.current.pointerId)
+    dragRef.current = null
+    if (draggedRef.current) {
+      setFabPosition((pos) => {
+        if (pos) saveFabPosition(pos)
+        return pos
+      })
+    }
+  }
+
+  const handleFabClick = () => {
+    if (draggedRef.current) {
+      draggedRef.current = false
+      return
+    }
+    setOpen(true)
+  }
+
   const toggleReadAloud = (m) => {
     if (!speechSupported) return
     if (speakingId === m.id) {
@@ -215,8 +316,12 @@ export default function ChatPanel() {
       <button
         ref={askButtonRef}
         className="chat-fab"
-        onClick={() => setOpen(true)}
-        aria-label="Ask a question"
+        style={fabPosition ? { left: fabPosition.left, top: fabPosition.top, right: 'auto', bottom: 'auto' } : undefined}
+        onPointerDown={handleFabPointerDown}
+        onPointerMove={handleFabPointerMove}
+        onPointerUp={handleFabPointerUp}
+        onClick={handleFabClick}
+        aria-label="Ask a question. Press and drag to move this button."
       >
         <span aria-hidden="true">💬</span>
         <span className="chat-fab-label">Ask a question</span>
