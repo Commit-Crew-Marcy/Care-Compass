@@ -16,6 +16,7 @@ export default function Home() {
       visibleControls: [
         { id: 'find-my-benefits-button', type: 'button', label: 'Find my benefits' },
         { id: 'see-how-it-works-button', type: 'button', label: 'See how it works' },
+        { id: 'meet-the-team-button', type: 'button', label: 'Meet the team' },
       ],
       visibleLinks: [],
     }),
@@ -132,6 +133,26 @@ export default function Home() {
             CareCompass uses a deterministic rules engine to identify possible programs.
             AI only explains your results and never decides whether you qualify.
           </p>
+        </div>
+      </section>
+
+      {/* ---- Team page teaser — stays visually secondary to the hero CTA ---- */}
+      <section className="home-team-teaser" aria-labelledby="team-teaser-heading">
+        <div className="home-team-teaser-inner">
+          <h2 id="team-teaser-heading" className="home-team-teaser-heading">
+            Built by Marcy Lab students
+          </h2>
+          <p className="home-team-teaser-text">
+            Meet the team that designed and developed CareCompass.
+          </p>
+          <button
+            id="meet-the-team-button"
+            type="button"
+            className="btn btn-outline home-team-teaser-btn"
+            onClick={() => navigate('/team')}
+          >
+            Meet the team
+          </button>
         </div>
       </section>
 

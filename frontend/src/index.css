@@ -20,6 +20,13 @@
   --badge-text: #27500A;
   --white: #ffffff;
 
+  /* Referenced by :focus-visible (below) and a couple of gold-accented
+     callouts, but never defined — every keyboard focus ring on the site
+     was rendering invisible until now. */
+  --gold: #B8860B;
+  --gold-tint: #FBF1D9;
+  --gold-text: #7A5B00;
+
   /* Shared shadow hues so every shadow reads as "the same material" at
      different intensities. Elevation tiers are multi-layered (several
      stacked shadows) for real, tactile depth rather than a single blur. */
@@ -1352,3 +1359,147 @@ form button.btn { margin-top: 6px; }
   outline-offset: 2px;
   border-radius: 7px;
 }
+
+/* ============================================================
+   MEET THE TEAM page
+   ============================================================ */
+.team-page { padding: 40px 0 var(--space-9); }
+
+.team-eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--navy);
+  margin-bottom: 8px;
+}
+
+.team-intro { margin-bottom: 16px; }
+.team-trust { margin-bottom: var(--space-7); }
+
+.team-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px;
+  margin-bottom: var(--space-8);
+}
+@media (max-width: 959px) {
+  .team-grid { grid-template-columns: 1fr; }
+}
+
+.team-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  border: 2px solid var(--mid);
+  border-radius: var(--radius-lg);
+  background: var(--white);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  transition: transform var(--t-base), box-shadow var(--t-base);
+}
+.team-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-md); }
+
+.team-card-photo {
+  width: 100%;
+  aspect-ratio: 4 / 5;
+  object-fit: cover;
+  object-position: 50% 15%;
+  display: block;
+  background: var(--tint);
+}
+
+.team-card-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  padding: 20px 22px 24px;
+}
+.team-card-heading-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 2px;
+}
+.team-card-name {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+.team-card-linkedin {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 7px;
+  background: var(--ink);
+  transition: background-color var(--t-fast), transform var(--t-base);
+}
+.team-card-linkedin svg { width: 18px; height: 18px; fill: var(--white); }
+.team-card-linkedin:hover { background: var(--navy); transform: translateY(-2px); }
+.team-card-role {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--navy);
+  margin-bottom: 12px;
+}
+.team-card-desc {
+  font-size: 16px;
+  line-height: 1.55;
+  color: var(--ink);
+}
+
+.team-project { margin-top: var(--space-7); }
+.team-project > p { font-size: 17px; line-height: 1.55; color: var(--navy-dark); max-width: 760px; }
+
+.team-principles {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 24px 0;
+  max-width: 560px;
+}
+.team-principles li {
+  background: var(--tint);
+  border: 2px solid var(--mid);
+  border-radius: var(--radius-sm);
+  padding: 14px 18px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .team-card, .team-card-linkedin { transition: none; }
+  .team-card:hover, .team-card-linkedin:hover { transform: none; }
+}
+
+/* ---- Home page: small, deliberately low-key link to the Team page —
+   must read as secondary to the "Find my benefits" hero CTA. ---- */
+.home-team-teaser {
+  padding: 0 0 clamp(var(--space-6), 5vw, var(--space-7));
+  background: var(--white);
+}
+.home-team-teaser-inner {
+  text-align: center;
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 0 var(--space-6);
+}
+.home-team-teaser-heading {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--ink);
+  margin-bottom: 6px;
+}
+.home-team-teaser-text {
+  font-size: 16px;
+  color: var(--navy);
+  margin-bottom: 16px;
+  line-height: 1.5;
+}
+.home-team-teaser-btn { width: auto; padding: 10px 22px; font-size: 16px; }

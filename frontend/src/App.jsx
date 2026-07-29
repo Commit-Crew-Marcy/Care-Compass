@@ -11,6 +11,7 @@ import MyScreenings from './pages/MyScreenings'
 import Questionnaire from './pages/Questionnaire'
 import Register from './pages/Register'
 import Results from './pages/Results'
+import Team from './pages/Team'
 
 export default function App() {
   const navigate = useNavigate()
@@ -77,6 +78,7 @@ export default function App() {
             >
               How It Works
             </button>
+            <Link to="/team" onClick={closeMenu}>Meet the Team</Link>
             {loggedIn ? (
               <>
                 <Link to="/screenings" onClick={closeMenu}>🔖 My saved results</Link>
@@ -121,6 +123,7 @@ export default function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/screenings" element={<MyScreenings />} />
+        <Route path="/team" element={<Team />} />
       </Routes>
 
       <ChatPanel />
