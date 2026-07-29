@@ -324,7 +324,6 @@ export default function ChatPanel() {
         aria-label="Ask a question. Press and drag to move this button."
       >
         <span aria-hidden="true">💬</span>
-        <span className="chat-fab-label">Ask a question</span>
       </button>
     )
   }
