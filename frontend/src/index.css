@@ -726,8 +726,8 @@ form button.btn { margin-top: 6px; }
   right: 16px;
   bottom: 96px;
   z-index: 50;
-  width: min(420px, calc(100vw - 32px));
-  height: min(560px, 74vh);
+  width: min(340px, calc(100vw - 32px));
+  height: min(440px, 60vh);
   background: var(--white);
   border: 2px solid var(--mid);
   border-radius: var(--radius-lg);
@@ -881,7 +881,7 @@ form button.btn { margin-top: 6px; }
 .chat-send, .chat-stop { width: auto; padding: 12px 20px; min-height: 44px; }
 
 @media (max-width: 480px) {
-  .chat-panel { right: 8px; bottom: 88px; height: 66vh; }
+  .chat-panel { right: 8px; bottom: 88px; height: 55vh; }
   /* A wide text pill risks covering trailing page content on short mobile
      screens (it's fixed to the viewport, not the document) — collapse to
      a compact icon-only button here instead. */
