@@ -697,7 +697,7 @@ form button.btn { margin-top: 6px; }
 .chat-fab {
   position: fixed;
   right: 20px;
-  bottom: 96px;
+  bottom: 44px;
   z-index: 40;
   display: inline-flex;
   align-items: center;
@@ -724,7 +724,7 @@ form button.btn { margin-top: 6px; }
 .chat-panel {
   position: fixed;
   right: 16px;
-  bottom: 96px;
+  bottom: 44px;
   z-index: 50;
   width: min(340px, calc(100vw - 32px));
   height: min(440px, 60vh);
