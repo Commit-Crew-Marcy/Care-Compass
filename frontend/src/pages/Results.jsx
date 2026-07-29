@@ -152,7 +152,7 @@ export default function Results() {
       {error && <div className="error-box">{error}</div>}
       {saved && (
         <div className="success-box">
-          Saved! View it anytime under <Link to="/screenings">🔖 My Saved Results</Link>.
+          Saved! View it anytime under <Link to="/screenings">🔖 My saved results</Link>.
         </div>
       )}
 

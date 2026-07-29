@@ -79,7 +79,7 @@ export default function App() {
             </button>
             {loggedIn ? (
               <>
-                <Link to="/screenings" onClick={closeMenu}>🔖 My Saved Results</Link>
+                <Link to="/screenings" onClick={closeMenu}>🔖 My saved results</Link>
                 <div className="nav-profile" ref={profileMenuRef}>
                   <button
                     type="button"

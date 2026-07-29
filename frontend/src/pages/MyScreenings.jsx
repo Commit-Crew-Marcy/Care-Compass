@@ -24,12 +24,12 @@ export default function MyScreenings() {
   const pageContext = useMemo(
     () => ({
       route: '/screenings',
-      pageTitle: 'CareCompass My Saved Results',
-      heading: 'My Saved Results',
+      pageTitle: 'CareCompass My saved results',
+      heading: 'My saved results',
       visibleControls:
         screenings?.length > 0
           ? [{ id: 'screenings-list', type: 'section', label: 'Your saved screenings' }]
-          : [{ id: 'start-a-screening-link', type: 'link', label: 'Check My Benefits' }],
+          : [{ id: 'start-a-screening-link', type: 'link', label: 'Check my benefits' }],
     }),
     [screenings]
   )
@@ -66,15 +66,15 @@ export default function MyScreenings() {
 
   return (
     <main className="container">
-      <h1>🔖 My Saved Results</h1>
+      <h1>🔖 My saved results</h1>
       <p className="subtitle">Your past eligibility checks. Rename, review, or delete them.</p>
       {error && <div className="error-box">{error}</div>}
 
       {screenings?.length === 0 && (
         <div className="card">
-          <h2>No saved Results Yet</h2>
+          <h2>No saved results yet</h2>
           <p>Complete the questionnaire and save your results.</p>
-          <Link id="start-a-screening-link" className="btn btn-primary" to="/" style={{ marginTop: 14 }}>Check My Benefits</Link>
+          <Link id="start-a-screening-link" className="btn btn-primary" to="/" style={{ marginTop: 14 }}>Check my benefits</Link>
         </div>
       )}
 
