@@ -102,6 +102,12 @@ export default function MyScreenings() {
                   : 'none'}
               </p>
               <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
+                <button
+                  className="btn btn-primary"
+                  onClick={() => navigate('/results', { state: { results: s.matchedBenefits } })}
+                >
+                  View results
+                </button>
                 <button className="btn btn-outline" onClick={() => startRename(s)}>Rename</button>
                 <button className="btn btn-outline" onClick={() => remove(s.id)}>Delete</button>
               </div>
