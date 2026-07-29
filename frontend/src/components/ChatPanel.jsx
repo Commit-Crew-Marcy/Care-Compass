@@ -18,8 +18,7 @@ const SUGGESTED = [
   'Help me find the Continue button',
 ]
 
-const PRIVACY_NOTICE =
-  'Do not enter passwords, Social Security numbers, insurance policy numbers, or immigration document numbers.'
+const PRIVACY_NOTICE = 'Do not enter passwords, SSNs, or ID numbers.'
 
 let nextMessageId = 1
 
