@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { getToken, getUser, logout } from './api'
 import { goToHowItWorks } from './navigation'
@@ -16,10 +16,16 @@ export default function App() {
   const navigate = useNavigate()
   const location = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false)
+  const profileMenuRef = useRef(null)
   const loggedIn = Boolean(getToken())
   const user = getUser()
+  const profileInitial = (user?.displayName || user?.email || '?').trim().charAt(0).toUpperCase()
 
-  const closeMenu = () => setMenuOpen(false)
+  const closeMenu = () => {
+    setMenuOpen(false)
+    setProfileMenuOpen(false)
+  }
 
   const handleLogout = async () => {
     closeMenu()
@@ -27,6 +33,19 @@ export default function App() {
     navigate('/')
     window.location.reload()
   }
+
+  // Close the profile dropdown on an outside click, same pattern as any
+  // standard account menu (Gmail, etc.) — only listens while it's open.
+  useEffect(() => {
+    if (!profileMenuOpen) return
+    const handleClickOutside = (event) => {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target)) {
+        setProfileMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [profileMenuOpen])
 
   return (
     <PageContextProvider>
@@ -61,8 +80,24 @@ export default function App() {
             {loggedIn ? (
               <>
                 <Link to="/screenings" onClick={closeMenu}>🔖 My Saved Results</Link>
-                <span className="nav-user">{user?.displayName || user?.email}</span>
-                <button className="nav-logout" onClick={handleLogout}>Log out</button>
+                <div className="nav-profile" ref={profileMenuRef}>
+                  <button
+                    type="button"
+                    className="nav-profile-btn"
+                    aria-haspopup="true"
+                    aria-expanded={profileMenuOpen}
+                    aria-label="Account menu"
+                    onClick={() => setProfileMenuOpen((open) => !open)}
+                  >
+                    {profileInitial}
+                  </button>
+                  {profileMenuOpen && (
+                    <div className="nav-profile-menu" role="menu">
+                      <span className="nav-profile-email">{user?.displayName || user?.email}</span>
+                      <button className="nav-logout" onClick={handleLogout}>Log out</button>
+                    </div>
+                  )}
+                </div>
               </>
             ) : (
               <>

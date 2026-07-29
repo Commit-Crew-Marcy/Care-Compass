@@ -496,15 +496,50 @@ textarea:focus { outline: 3px solid var(--mid); outline-offset: 1px; border-colo
   transform: translateY(-2px);
   box-shadow: 0 0 0 1px rgba(24, 95, 165, 0.4), 0 10px 24px rgba(12, 68, 124, 0.4);
 }
-.nav-user {
-  color: var(--light);
-  font-weight: 500;
-  font-size: 15px;
-  line-height: 1.4;
+.nav-profile { position: relative; }
+.nav-profile-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
   background: rgba(255, 255, 255, 0.14);
-  border-radius: var(--radius-pill);
-  padding: 4px 12px;
+  color: var(--white);
+  border: 2px solid var(--light);
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color var(--t-fast), transform var(--t-base);
 }
+.nav-profile-btn:hover { background: rgba(255, 255, 255, 0.24); transform: translateY(-2px); }
+.nav-profile-menu {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  min-width: 220px;
+  background: var(--white);
+  border: 2px solid var(--mid);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 60;
+}
+.nav-profile-email {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+  word-break: break-all;
+}
+.nav-profile-menu .nav-logout {
+  color: var(--navy);
+  border-color: var(--mid);
+  width: 100%;
+}
+.nav-profile-menu .nav-logout:hover { background: var(--tint); color: var(--navy-dark); transform: none; }
 .nav-logout {
   background: transparent;
   color: var(--white);
@@ -584,6 +619,7 @@ textarea:focus { outline: 3px solid var(--mid); outline-offset: 1px; border-colo
     box-shadow: var(--shadow-lg);
   }
   .nav-links--open { display: flex; }
+  .nav-profile-menu { right: auto; left: 0; }
 }
 form button.btn { margin-top: 6px; }
 .disclaimer a { color: var(--navy); font-weight: 700; }
