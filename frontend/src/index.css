@@ -734,7 +734,10 @@ form button.btn { margin-top: 6px; }
   position: fixed;
   right: 20px;
   bottom: 44px;
-  z-index: 40;
+  /* Now draggable anywhere, including over the sticky nav (z-index: 80) and
+     the mobile nav drawer (z-index: 100) — stays above everything else so
+     it can never get stuck behind another element and become unreachable. */
+  z-index: 110;
   display: inline-flex;
   align-items: center;
   gap: 8px;
