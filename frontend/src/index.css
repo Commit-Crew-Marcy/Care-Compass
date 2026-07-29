@@ -130,10 +130,10 @@ body {
 /* Wide container for home/marketing pages */
 .page-wrap { width: min(calc(100% - 40px), 1180px); margin: 0 auto; }
 
-.container { width: min(100% - 32px, 1040px); margin-inline: auto; padding: 32px 0 172px; }
+.container { width: min(100% - 32px, 1040px); margin-inline: auto; padding: 20px 0 172px; }
 
 h1 { font-size: clamp(2.25rem, 5vw, 4rem); font-weight: 800; line-height: 1.1; letter-spacing: -0.02em; margin-bottom: 8px; }
-.subtitle { color: var(--navy); line-height: 1.5; margin-bottom: 28px; }
+.subtitle { color: var(--navy); line-height: 1.5; margin-bottom: 16px; }
 
 label { display: block; font-weight: 600; line-height: 1.4; margin-bottom: 6px; }
 
@@ -160,8 +160,8 @@ input:focus, select:focus { outline: 3px solid var(--mid); outline-offset: 1px; 
   border: 2px solid var(--mid);
   border-radius: var(--radius-sm);
   background: var(--tint);
-  padding: 16px;
-  margin-bottom: 12px;
+  padding: 12px;
+  margin-bottom: 8px;
   cursor: pointer;
   font-weight: 600;
   min-height: 44px;
@@ -233,13 +233,13 @@ input:focus, select:focus { outline: 3px solid var(--mid); outline-offset: 1px; 
   right: 0;
   background: var(--white);
   box-shadow: var(--shadow-bar);
-  padding: 14px 20px 18px;
+  padding: 10px 20px 14px;
   max-height: 55vh;
   overflow-y: auto;
 }
 .progress-inner { width: min(100% - 32px, 1040px); margin-inline: auto; }
-.progress-label { text-align: center; color: var(--navy); font-size: 15px; font-weight: 700; margin-bottom: 8px; }
-.progress-track { height: 10px; background: var(--light); border-radius: var(--radius-pill); overflow: hidden; margin-bottom: 14px; box-shadow: var(--shadow-inset); }
+.progress-label { text-align: center; color: var(--navy); font-size: 14px; font-weight: 700; margin-bottom: 6px; }
+.progress-track { height: 10px; background: var(--light); border-radius: var(--radius-pill); overflow: hidden; margin-bottom: 10px; box-shadow: var(--shadow-inset); }
 .progress-fill {
   height: 100%;
   background: linear-gradient(90deg, var(--navy) 0%, var(--navy-dark) 100%);
@@ -313,25 +313,25 @@ a.card:hover {
   border: 2px solid var(--mid);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-sm);
-  padding: 22px 26px 20px;
-  margin-bottom: 28px;
+  padding: 14px 18px 12px;
+  margin-bottom: 16px;
 }
 .step1-heading {
-  font-size: 26px;
+  font-size: 20px;
   font-weight: 800;
   color: var(--ink);
-  margin-bottom: 8px;
+  margin-bottom: 6px;
   line-height: 1.25;
   letter-spacing: -0.01em;
 }
 .step1-desc {
-  font-size: 17px;
+  font-size: 15px;
   color: var(--navy);
-  line-height: 1.55;
-  margin-bottom: 10px;
+  line-height: 1.45;
+  margin-bottom: 6px;
 }
 .step1-trust {
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 700;
   color: var(--navy);
   letter-spacing: 0.03em;
@@ -339,11 +339,11 @@ a.card:hover {
 
 /* ---- Step 1 question sub-heading ---- */
 .step1-question {
-  font-size: 22px;
+  font-size: 19px;
   font-weight: 800;
   line-height: 1.3;
   color: var(--ink);
-  margin-bottom: 6px;
+  margin-bottom: 4px;
   letter-spacing: -0.01em;
 }
 
@@ -354,9 +354,9 @@ a.card:hover {
 
 /* ---- Field helpers and inline errors ---- */
 .field-hint {
-  font-size: 15px;
+  font-size: 14px;
   color: var(--navy);
-  margin-bottom: 14px;
+  margin-bottom: 10px;
   font-weight: 400;
 }
 .field-error {
@@ -380,23 +380,23 @@ ol.req-list li { margin-bottom: 8px; }
 .ds-fieldset {
   border: none;
   padding: 0;
-  margin: 0 0 28px 0;
+  margin: 0 0 16px 0;
   min-width: 0;
 }
 
 /* Both legend levels: block so it participates in normal flow */
 .ds-legend {
-  font-size: 21px;
+  font-size: 18px;
   font-weight: 800;
   color: var(--ink);
   line-height: 1.3;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
   display: block;
   width: 100%;
   letter-spacing: -0.01em;
 }
 
-.ds-hint { margin-bottom: 14px; }
+.ds-hint { margin-bottom: 10px; }
 
 /* The Yes / No radio cards sit in a vertical column */
 .ds-radio-group {
