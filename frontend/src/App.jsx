@@ -80,30 +80,27 @@ export default function App() {
             </button>
             <Link to="/team" onClick={closeMenu}>Meet the Team</Link>
             {loggedIn ? (
-              <>
-                <Link to="/screenings" onClick={closeMenu}>🔖 My saved results</Link>
-                <div className="nav-profile" ref={profileMenuRef}>
-                  <button
-                    type="button"
-                    className="nav-profile-btn"
-                    aria-haspopup="true"
-                    aria-expanded={profileMenuOpen}
-                    aria-label="Account menu"
-                    onClick={() => setProfileMenuOpen((open) => !open)}
-                  >
-                    {profileInitial}
-                  </button>
-                  {profileMenuOpen && (
-                    <div className="nav-profile-menu" role="menu">
-                      <span className="nav-profile-email">{user?.displayName || user?.email}</span>
-                      <Link to="/screenings" className="nav-profile-link" onClick={closeMenu}>
-                        🔖 My saved results
-                      </Link>
-                      <button className="nav-logout" onClick={handleLogout}>Log out</button>
-                    </div>
-                  )}
-                </div>
-              </>
+              <div className="nav-profile" ref={profileMenuRef}>
+                <button
+                  type="button"
+                  className="nav-profile-btn"
+                  aria-haspopup="true"
+                  aria-expanded={profileMenuOpen}
+                  aria-label="Account menu"
+                  onClick={() => setProfileMenuOpen((open) => !open)}
+                >
+                  {profileInitial}
+                </button>
+                {profileMenuOpen && (
+                  <div className="nav-profile-menu" role="menu">
+                    <span className="nav-profile-email">{user?.displayName || user?.email}</span>
+                    <Link to="/screenings" className="nav-profile-link" onClick={closeMenu}>
+                      🔖 My saved results
+                    </Link>
+                    <button className="nav-logout" onClick={handleLogout}>Log out</button>
+                  </div>
+                )}
+              </div>
             ) : (
               <>
                 <Link to="/login" onClick={closeMenu}>Log in</Link>
