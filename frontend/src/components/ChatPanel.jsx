@@ -22,28 +22,10 @@ const PRIVACY_NOTICE = 'Do not enter passwords, SSNs, or ID numbers.'
 
 let nextMessageId = 1
 
-// Remembers where the user dragged the floating "Ask a question" button so
-// it stays put across reloads. Silently no-ops in private browsing / quota
-// errors — losing the remembered spot just means it falls back to default.
-const FAB_POSITION_KEY = 'cc_chat_fab_position'
+// The floating "Ask a question" button is draggable within a session, but
+// deliberately not persisted — every fresh page load starts back at its
+// default spot.
 const DRAG_THRESHOLD_PX = 6
-
-function loadFabPosition() {
-  try {
-    const raw = localStorage.getItem(FAB_POSITION_KEY)
-    return raw ? JSON.parse(raw) : null
-  } catch {
-    return null
-  }
-}
-
-function saveFabPosition(position) {
-  try {
-    localStorage.setItem(FAB_POSITION_KEY, JSON.stringify(position))
-  } catch {
-    // ignore
-  }
-}
 
 // Best-effort language guess for read-aloud, based on the script used in the
 // response text. Falls back to the browser's language. No dependency added.
@@ -79,7 +61,7 @@ export default function ChatPanel() {
   const [responseMode, setResponseMode] = useState('simple')
   const [pendingAction, setPendingAction] = useState(null)
   const [speakingId, setSpeakingId] = useState(null)
-  const [fabPosition, setFabPosition] = useState(loadFabPosition)
+  const [fabPosition, setFabPosition] = useState(null)
 
   const bottomRef = useRef(null)
   const askButtonRef = useRef(null)
@@ -145,7 +127,6 @@ export default function ChatPanel() {
           top: Math.min(Math.max(pos.top, 0), maxTop),
         }
         if (clamped.left === pos.left && clamped.top === pos.top) return pos
-        saveFabPosition(clamped)
         return clamped
       })
     }
@@ -277,12 +258,6 @@ export default function ChatPanel() {
   const handleFabPointerUp = (e) => {
     if (dragRef.current) e.currentTarget.releasePointerCapture?.(dragRef.current.pointerId)
     dragRef.current = null
-    if (draggedRef.current) {
-      setFabPosition((pos) => {
-        if (pos) saveFabPosition(pos)
-        return pos
-      })
-    }
   }
 
   const handleFabClick = () => {
