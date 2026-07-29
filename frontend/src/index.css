@@ -541,6 +541,16 @@ textarea:focus { outline: 3px solid var(--mid); outline-offset: 1px; border-colo
   font-weight: 600;
   word-break: break-all;
 }
+.nav-profile-menu .nav-profile-link {
+  color: var(--navy);
+  font-weight: 700;
+  font-size: 15px;
+  text-decoration: none;
+  padding: 8px 0;
+  border-top: 1px solid var(--light);
+  border-bottom: 1px solid var(--light);
+}
+.nav-profile-menu .nav-profile-link:hover { color: var(--navy-dark); text-decoration: underline; }
 .nav-profile-menu .nav-logout {
   color: var(--navy);
   border-color: var(--mid);

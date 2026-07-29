@@ -96,6 +96,9 @@ export default function App() {
                   {profileMenuOpen && (
                     <div className="nav-profile-menu" role="menu">
                       <span className="nav-profile-email">{user?.displayName || user?.email}</span>
+                      <Link to="/screenings" className="nav-profile-link" onClick={closeMenu}>
+                        🔖 My saved results
+                      </Link>
                       <button className="nav-logout" onClick={handleLogout}>Log out</button>
                     </div>
                   )}
