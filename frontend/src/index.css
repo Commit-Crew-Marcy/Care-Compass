@@ -1373,7 +1373,7 @@ form button.btn { margin-top: 6px; }
 /* ============================================================
    MEET THE TEAM page
    ============================================================ */
-.team-page { padding: 40px 0 var(--space-9); }
+.team-page { padding: 24px 0 var(--space-9); }
 
 .team-eyebrow {
   text-transform: uppercase;
@@ -1384,8 +1384,8 @@ form button.btn { margin-top: 6px; }
   margin-bottom: 8px;
 }
 
-.team-intro { margin-bottom: 16px; }
-.team-trust { margin-bottom: var(--space-7); }
+.team-intro { margin-bottom: 12px; }
+.team-trust { margin-bottom: var(--space-5); }
 
 .team-grid {
   display: grid;
@@ -1412,9 +1412,9 @@ form button.btn { margin-top: 6px; }
 
 .team-card-photo {
   width: 100%;
-  aspect-ratio: 4 / 5;
+  aspect-ratio: 1 / 1;
   object-fit: cover;
-  object-position: 50% 15%;
+  object-position: 50% 20%;
   display: block;
   background: var(--tint);
 }

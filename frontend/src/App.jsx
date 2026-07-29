@@ -35,6 +35,16 @@ export default function App() {
     window.location.reload()
   }
 
+  // React Router does not reset scroll position on navigation. Without
+  // this, clicking a link while scrolled down (e.g. the "Meet the team"
+  // button near the bottom of the Home page) lands on the new page at
+  // that same scroll offset instead of at its top. Skipped when a caller
+  // (goToHowItWorks) explicitly requests scrolling to a specific section.
+  useEffect(() => {
+    if (location.state?.scrollTo) return
+    window.scrollTo(0, 0)
+  }, [location.pathname])
+
   // Close the profile dropdown on an outside click, same pattern as any
   // standard account menu (Gmail, etc.) — only listens while it's open.
   useEffect(() => {
