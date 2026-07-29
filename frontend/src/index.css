@@ -825,21 +825,24 @@ form button.btn { margin-top: 6px; }
 .chat-body {
   flex: 1;
   overflow-y: auto;
-  padding: 12px;
+  padding: 10px 12px;
   background: var(--tint-soft);
 }
-.chat-intro { color: var(--ink); margin-bottom: 10px; font-size: 14px; }
+.chat-intro { color: var(--ink); margin-bottom: 8px; font-size: 14px; line-height: 1.35; }
 
-.chat-suggested { display: flex; flex-direction: column; gap: 6px; }
+/* Two columns so all 4 suggestions fit above the fold without scrolling —
+   a single stacked column of 4 ran taller than the shrunken panel. */
+.chat-suggested { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .chat-chip {
   text-align: left;
   background: var(--tint);
   border: 2px solid var(--mid);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-sm);
-  padding: 9px 12px;
-  min-height: 38px;
-  font-size: 14px;
+  padding: 7px 10px;
+  min-height: 34px;
+  font-size: 13px;
+  line-height: 1.3;
   color: var(--ink);
   cursor: pointer;
   transition: transform var(--t-base), box-shadow var(--t-base),
