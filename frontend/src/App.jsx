@@ -88,7 +88,6 @@ export default function App() {
             >
               How It Works
             </button>
-            <Link to="/team" onClick={closeMenu}>Meet the Team</Link>
             <Link to="/questionnaire" className="nav-cta-btn" onClick={closeMenu}>
               Find my benefits
             </Link>
