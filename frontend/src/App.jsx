@@ -88,9 +88,11 @@ export default function App() {
             >
               How It Works
             </button>
-            <Link to="/questionnaire" className="nav-cta-btn" onClick={closeMenu}>
-              Find my benefits
-            </Link>
+            {location.pathname !== '/questionnaire' && (
+              <Link to="/questionnaire" className="nav-cta-btn" onClick={closeMenu}>
+                Find my benefits
+              </Link>
+            )}
             {loggedIn ? (
               <div className="nav-profile" ref={profileMenuRef}>
                 <button
