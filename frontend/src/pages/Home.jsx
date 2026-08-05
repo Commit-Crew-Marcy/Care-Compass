@@ -53,13 +53,32 @@ export default function Home() {
               family support, income programs, and help with household costs.
             </p>
             <div className="home-cta-row">
-              <button
-                id="find-my-benefits-button"
-                className="btn btn-primary home-cta-btn"
-                onClick={() => navigate('/questionnaire')}
-              >
-                Find my benefits
-              </button>
+              <div className="home-cta-highlight">
+                <div className="home-cta-hint" aria-hidden="true">
+                  <span className="home-cta-hint-text">Start here to find your benefits</span>
+                  <svg
+                    className="home-cta-hint-arrow"
+                    viewBox="0 0 24 24"
+                    width="20"
+                    height="20"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <line x1="12" y1="3" x2="12" y2="17" />
+                    <polyline points="6 11 12 17 18 11" />
+                  </svg>
+                </div>
+                <button
+                  id="find-my-benefits-button"
+                  className="btn btn-primary home-cta-btn"
+                  onClick={() => navigate('/questionnaire')}
+                >
+                  Find my benefits
+                </button>
+              </div>
               <button
                 id="see-how-it-works-button"
                 type="button"
