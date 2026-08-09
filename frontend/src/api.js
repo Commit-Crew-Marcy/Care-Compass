@@ -126,6 +126,15 @@ export async function checkEligibility(intake) {
   }
 }
 
+// Fire-and-forget ping to wake a sleeping Render free-tier instance early.
+// Call once when the app loads so the ~30-60s cold start overlaps with the
+// user reading the page and filling out the questionnaire, instead of
+// happening after they hit "Find my benefits" on the review step. Errors
+// are ignored — this is best-effort, not something the UI should surface.
+export function warmUpServer() {
+  fetch(`${BASE}/`).catch(() => {})
+}
+
 export const getBenefit = (id) => {
   const value = String(id)
   if (value.startsWith('nyc-')) {

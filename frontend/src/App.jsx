@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
-import { getToken, getUser, logout } from './api'
+import { getToken, getUser, logout, warmUpServer } from './api'
 import { goToHowItWorks } from './navigation'
 import { PageContextProvider } from './pageContext'
 import ChatPanel from './components/ChatPanel'
@@ -34,6 +34,15 @@ export default function App() {
     navigate('/')
     window.location.reload()
   }
+
+  // Wake a sleeping backend the moment the app loads, not when the user
+  // hits "Find my benefits" on the questionnaire's review step — gives
+  // the ~30-60s Render cold start a head start while they read the page
+  // and fill out the form, so submitting usually hits an already-awake
+  // server. Runs once for the life of the app.
+  useEffect(() => {
+    warmUpServer()
+  }, [])
 
   // React Router does not reset scroll position on navigation. Without
   // this, clicking a link while scrolled down (e.g. the "Meet the team"
