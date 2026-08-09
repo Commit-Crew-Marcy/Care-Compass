@@ -253,23 +253,23 @@ questionInput.addEventListener('keydown', (event) => {
 wireSuggestionButtons()
 
 // Unlike the old popup — which closed and reopened fresh every time —
-// the side panel stays docked while the user switches tabs. Follow the
-// newly active tab so the guide reflects whatever page is on screen,
-// instead of silently going stale. If the extension hasn't been granted
-// access to that tab yet, chrome.tabs.get() simply omits its url, and
-// loadTab() falls back to the same "open a regular website" message a
-// never-visited tab always showed — no new permission is requested here.
-if (chrome.tabs?.onActivated) {
-  chrome.tabs.onActivated.addListener(({ tabId }) => {
-    if (tabId === activeTab?.id) return
-    callChrome((done) => chrome.tabs.get(tabId, done))
-      .then((tab) => {
-        resetConversation()
-        return loadTab(tab)
-      })
-      .catch(() => {})
-  })
-}
+// the side panel stays docked while the user switches tabs. background.js
+// sends this on every icon click, including a second click while the
+// panel is already open on a different tab, which is also the gesture
+// Chrome requires before it will grant activeTab for that tab. (Plain tab
+// switches, with no click, deliberately do *not* trigger a re-read here —
+// same "only reads a page the user explicitly asked about" behavior the
+// popup always had.)
+chrome.runtime.onMessage.addListener((message) => {
+  if (message?.type !== 'CARE_COMPASS_ACTIVE_TAB') return
+  if (message.tabId === activeTab?.id) return
+  callChrome((done) => chrome.tabs.get(message.tabId, done))
+    .then((tab) => {
+      resetConversation()
+      return loadTab(tab)
+    })
+    .catch(() => {})
+})
 
 document.querySelectorAll('input[name="response-mode"]').forEach((input) => {
   input.addEventListener('change', () => {

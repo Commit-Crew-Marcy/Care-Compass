@@ -2,9 +2,23 @@ importScripts('shared.js')
 
 // Dock the guide as a side panel — like Chrome's own AI panels — instead
 // of a popup that closes the moment you click anywhere else on the page.
-chrome.sidePanel
-  .setPanelBehavior({ openPanelOnActionClick: true })
-  .catch((error) => console.error('CareCompass: could not enable the side panel', error))
+//
+// Handled via action.onClicked (rather than the simpler
+// setPanelBehavior({ openPanelOnActionClick: true })) so that every icon
+// click — even a second click while the panel is already open on a
+// different tab — re-grants activeTab for whichever tab is active right
+// now and tells the panel to read it. Chrome only grants activeTab to the
+// tab that was active *at the moment the icon was clicked*; a docked panel
+// that tried to read a tab the user merely switched to, without a fresh
+// click, would have no permission to read it and would fail on every
+// ordinary website, not just unsupported ones.
+chrome.action.onClicked.addListener((tab) => {
+  if (!tab?.id) return
+  chrome.sidePanel.open({ tabId: tab.id }).catch((error) => {
+    console.error('CareCompass: could not open the side panel', error)
+  })
+  chrome.runtime.sendMessage({ type: 'CARE_COMPASS_ACTIVE_TAB', tabId: tab.id }).catch(() => {})
+})
 
 const LOCAL_API_BASE = 'http://localhost:8000'
 const PRODUCTION_API_BASE = 'https://care-compass-4gj5.onrender.com'

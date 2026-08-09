@@ -3,7 +3,7 @@
   "name": "CareCompass Browser Guide",
   "version": "0.2.0",
   "description": "Explains benefits websites in plain language and helps you find safe next steps.",
-  "minimum_chrome_version": "114",
+  "minimum_chrome_version": "116",
   "action": {
     "default_title": "Open CareCompass Browser Guide"
   },
