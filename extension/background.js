@@ -14,9 +14,18 @@ importScripts('shared.js')
 // ordinary website, not just unsupported ones.
 chrome.action.onClicked.addListener((tab) => {
   if (!tab?.id) return
-  chrome.sidePanel.open({ tabId: tab.id }).catch((error) => {
+  // sidePanel.open() can throw synchronously (not just reject) for some
+  // argument/state errors — wrapped so a failure here can never stop the
+  // CARE_COMPASS_ACTIVE_TAB message below from going out. The panel needs
+  // that message to know which tab to read even if it happens to already
+  // be open (open() failing for an already-open panel is not fatal).
+  try {
+    chrome.sidePanel.open({ tabId: tab.id }).catch((error) => {
+      console.error('CareCompass: could not open the side panel', error)
+    })
+  } catch (error) {
     console.error('CareCompass: could not open the side panel', error)
-  })
+  }
   chrome.runtime.sendMessage({ type: 'CARE_COMPASS_ACTIVE_TAB', tabId: tab.id }).catch(() => {})
 })
 
