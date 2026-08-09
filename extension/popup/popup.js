@@ -14,6 +14,8 @@ const confirmationText = document.querySelector('#confirmation-text')
 const confirmActionButton = document.querySelector('#confirm-action')
 const cancelActionButton = document.querySelector('#cancel-action')
 
+const welcomeHTML = welcomeElement ? welcomeElement.outerHTML : ''
+
 let activeTab = null
 let pageContext = null
 let history = []
@@ -189,11 +191,29 @@ async function sendQuestion(rawQuestion) {
   }
 }
 
-async function initialize() {
+function wireSuggestionButtons() {
+  messagesElement.querySelectorAll('.suggestion').forEach((button) => {
+    button.addEventListener('click', () => sendQuestion(button.dataset.question))
+  })
+}
+
+// Clears the conversation back to a fresh "welcome" state — used when the
+// panel switches to a different tab, so an old page's chat history doesn't
+// linger next to a new page's context.
+function resetConversation() {
+  history = []
+  pendingAction = null
+  confirmationElement.hidden = true
+  if ('speechSynthesis' in window) speechSynthesis.cancel()
+  speakingButton = null
+  messagesElement.innerHTML = welcomeHTML
+  wireSuggestionButtons()
+}
+
+async function loadTab(tab) {
   setBusy(true)
   try {
-    const tabs = await callChrome((done) => chrome.tabs.query({ active: true, currentWindow: true }, done))
-    activeTab = tabs?.[0]
+    activeTab = tab
     if (!activeTab || !helpers.isSupportedPageUrl(activeTab.url)) {
       throw new Error('Open a regular website to use the guide.')
     }
@@ -214,6 +234,11 @@ async function initialize() {
   }
 }
 
+async function initialize() {
+  const tabs = await callChrome((done) => chrome.tabs.query({ active: true, currentWindow: true }, done))
+  await loadTab(tabs?.[0])
+}
+
 questionForm.addEventListener('submit', (event) => {
   event.preventDefault()
   sendQuestion(questionInput.value)
@@ -225,9 +250,26 @@ questionInput.addEventListener('keydown', (event) => {
   questionForm.requestSubmit()
 })
 
-document.querySelectorAll('.suggestion').forEach((button) => {
-  button.addEventListener('click', () => sendQuestion(button.dataset.question))
-})
+wireSuggestionButtons()
+
+// Unlike the old popup — which closed and reopened fresh every time —
+// the side panel stays docked while the user switches tabs. Follow the
+// newly active tab so the guide reflects whatever page is on screen,
+// instead of silently going stale. If the extension hasn't been granted
+// access to that tab yet, chrome.tabs.get() simply omits its url, and
+// loadTab() falls back to the same "open a regular website" message a
+// never-visited tab always showed — no new permission is requested here.
+if (chrome.tabs?.onActivated) {
+  chrome.tabs.onActivated.addListener(({ tabId }) => {
+    if (tabId === activeTab?.id) return
+    callChrome((done) => chrome.tabs.get(tabId, done))
+      .then((tab) => {
+        resetConversation()
+        return loadTab(tab)
+      })
+      .catch(() => {})
+  })
+}
 
 document.querySelectorAll('input[name="response-mode"]').forEach((input) => {
   input.addEventListener('change', () => {

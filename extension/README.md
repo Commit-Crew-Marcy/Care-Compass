@@ -32,7 +32,9 @@ the user leaves the site.
 5. Select **Load unpacked** and choose this `extension/` folder.
 6. On the extension card, select **Details → Extension options → Local
    development**. This lets an external benefits website use your local API.
-7. Pin **CareCompass Browser Guide**, open a regular website, and select it.
+7. Pin **CareCompass Browser Guide**, open a regular website, and select it —
+   it docks as a side panel (like Chrome's own AI panels) instead of a popup
+   that closes on an outside click, and follows you as you switch tabs.
 
 When used on a localhost page, the extension calls `http://localhost:8000`.
 On other sites, Automatic mode calls the deployed CareCompass API. The

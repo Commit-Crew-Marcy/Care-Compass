@@ -1,5 +1,11 @@
 importScripts('shared.js')
 
+// Dock the guide as a side panel — like Chrome's own AI panels — instead
+// of a popup that closes the moment you click anywhere else on the page.
+chrome.sidePanel
+  .setPanelBehavior({ openPanelOnActionClick: true })
+  .catch((error) => console.error('CareCompass: could not enable the side panel', error))
+
 const LOCAL_API_BASE = 'http://localhost:8000'
 const PRODUCTION_API_BASE = 'https://care-compass-4gj5.onrender.com'
 const EXTENSION_CHAT_PATH = '/api/ai/extension/chat'
