@@ -37,9 +37,9 @@ the user leaves the site.
    it docks as a side panel (like Chrome's own AI panels) instead of a popup
    that closes on an outside click, and follows you as you switch tabs.
 
-When used on a localhost page, the extension calls `http://localhost:8000`.
-On other sites, Automatic mode calls the deployed CareCompass API. The
-developer option can explicitly use localhost while testing external sites.
+While the extension is in local development, Automatic and Local development
+modes both call `http://localhost:8000` on every regular website. Production is
+an explicit setting and is not used automatically.
 
 ## Checks
 

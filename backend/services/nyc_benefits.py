@@ -24,9 +24,27 @@ NYC_DATASET_URL = os.getenv(
     "NYC_BENEFITS_API_URL",
     "https://data.cityofnewyork.us/resource/kvhd-5fmu.json",
 )
-NYC_DATASET_PUBLIC_URL = "https://data.cityofnewyork.us/resource/kvhd-5fmu.json"
+NYC_DATASET_PUBLIC_URL = "https://data.cityofnewyork.us/d/kvhd-5fmu"
 CACHE_TTL_SECONDS = 60 * 60
 MAX_NYC_RESULTS = 10
+
+# Some current NYC Benefits Platform records omit every structured URL and a
+# few also omit links from their HTML instructions. These stable government
+# pages keep those resources useful instead of rendering a dead-end detail
+# page. Entries are keyed by the dataset's language-specific unique id.
+PROGRAM_OFFICIAL_URLS = {
+    "P041en": "https://www.nyc.gov/site/hra/help/adult-protective-services.page",
+    "P054en": "https://www.nyc.gov/site/doh/health/health-topics/children-with-special-healthcare-needs.page",
+    "P059en": "https://www.nyc.gov/site/doh/health/health-topics/child-and-adolescent-mental-health-outpatient.page",
+    "P062en": "https://www.nychealthandhospitals.org/services/primary-and-preventive-care/",
+    "P073en": "https://www.nyc.gov/site/acs/justice/family-assessment-program.page",
+    "P103en": "https://department.va.gov/homeless/hud-vash/",
+    "P140en": "https://www.nyc.gov/site/hra/help/adult-protective-services.page",
+    "P144en": "https://www.nyc.gov/site/dycd/services/runaway-homeless-youth.page",
+    "P145en": "https://www.nyc.gov/site/dfta/services/ny-connects.page",
+    "P162en": "https://www.mta.info/fares-tolls/subway-bus/reduced-fare",
+    "P163en": "https://www.ny.gov/programs/new-york-state-paid-prenatal-leave",
+}
 
 DATASET_FIELDS = [
     "unique_id_number",
@@ -111,6 +129,22 @@ class _PlainTextParser(HTMLParser):
         return " ".join("".join(self.parts).split())
 
 
+class _HTTPLinkParser(HTMLParser):
+    """Collect safe web links embedded in trusted NYC dataset HTML."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.links: List[str] = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag.lower() != "a":
+            return
+        href = next((value for key, value in attrs if key.lower() == "href"), None)
+        url = safe_http_url(href)
+        if url and url not in self.links:
+            self.links.append(url)
+
+
 def plain_text(value: Optional[str]) -> str:
     """Turn trusted-source HTML into display-safe plain text."""
     if not value or str(value).strip().upper() == "NULL":
@@ -129,6 +163,50 @@ def safe_http_url(*values: Optional[str]) -> Optional[str]:
         if parsed.scheme in ("http", "https") and parsed.netloc:
             return str(value).strip()
     return None
+
+
+def html_http_urls(value: Optional[str]) -> List[str]:
+    """Return safe http(s) destinations without rendering dataset HTML."""
+    if not value or str(value).strip().upper() == "NULL":
+        return []
+    parser = _HTTPLinkParser()
+    parser.feed(html.unescape(str(value)))
+    parser.close()
+    return parser.links
+
+
+def official_program_link(record: dict) -> Tuple[Optional[str], str]:
+    """Choose an application or information page from trusted record data."""
+    application_url = safe_http_url(record.get("url_of_online_application"))
+    if application_url:
+        return application_url, "application"
+
+    structured_information_url = safe_http_url(
+        record.get("office_locations_url"),
+        record.get("url_of_pdf_application_forms"),
+    )
+    if structured_information_url:
+        return structured_information_url, "information"
+
+    curated_url = safe_http_url(
+        PROGRAM_OFFICIAL_URLS.get(plain_text(record.get("unique_id_number")))
+    )
+    if curated_url:
+        return curated_url, "information"
+
+    # The dataset frequently embeds its only official destination inside the
+    # rich-text application instructions. Use the first safe web link while
+    # continuing to reject tel:, mailto:, javascript:, and malformed URLs.
+    for field in (
+        "how_to_apply_summary",
+        "plain_language_eligibility",
+        "program_description",
+        "heads_up",
+    ):
+        links = html_http_urls(record.get(field))
+        if links:
+            return links[0], "information"
+    return None, ""
 
 
 def _fetch_records() -> List[dict]:
@@ -240,17 +318,15 @@ def record_to_benefit(
         record.get("plain_language_program_name")
     )
     required_documents = plain_text(record.get("required_documents_summary"))
+    apply_url, official_link_type = official_program_link(record)
     return {
         "id": f"nyc-{external_id}",
         "external_id": external_id,
         "name": name,
         "description": description or summary,
         "eligibility_summary": summary or "Review this NYC program's official requirements.",
-        "apply_url": safe_http_url(
-            record.get("url_of_online_application"),
-            record.get("office_locations_url"),
-            record.get("url_of_pdf_application_forms"),
-        ),
+        "apply_url": apply_url,
+        "official_link_type": official_link_type,
         "program_type": CATEGORY_TO_PROGRAM_TYPE.get(
             plain_text(record.get("program_category")), "other"
         ),

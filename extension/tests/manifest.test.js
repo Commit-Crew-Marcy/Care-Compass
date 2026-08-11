@@ -21,7 +21,7 @@ test('the guide is docked as a side panel, not a popup that closes on an outside
   assert.equal(manifest.action.default_popup, undefined)
 })
 
-test('the background request path is bounded and does not retry the same AI request', () => {
+test('the background request path is bounded and avoids an unbounded retry loop', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'background.js'), 'utf8')
 
   assert.match(source, /const REQUEST_TIMEOUT_MS = 15_000/)

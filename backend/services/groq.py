@@ -11,7 +11,10 @@ import httpx
 
 DEFAULT_GROQ_MODEL: Final = "openai/gpt-oss-20b"
 GROQ_BASE_URL: Final = "https://api.groq.com/openai/v1"
-GROQ_TIMEOUT_SECONDS: Final = 6.0
+# The extension starts this fallback while a slow primary is still running,
+# so it can have enough time to survive a brief provider slowdown without
+# extending the shared five-second response deadline.
+GROQ_TIMEOUT_SECONDS: Final = 3.75
 GROQ_MAX_OUTPUT_TOKENS: Final = 512
 
 

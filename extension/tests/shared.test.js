@@ -8,6 +8,7 @@ const {
   prepareContextText,
   preparePageText,
   selectApiBase,
+  selectApiBases,
   validateRequestedAction,
 } = require('../shared.js')
 
@@ -25,15 +26,26 @@ test('all localhost development ports use the local backend', () => {
   assert.equal(isLocalPageUrl('https://care-compass-three.vercel.app/results'), false)
 })
 
-test('developer connection mode can use localhost on an external website', () => {
+test('development modes use localhost on an external website', () => {
   const local = 'http://localhost:8000'
   const production = 'https://api.example.com'
   const externalPage = 'https://www.healthcare.gov/'
 
   assert.equal(selectApiBase('local', externalPage, local, production), local)
   assert.equal(selectApiBase('production', externalPage, local, production), production)
-  assert.equal(selectApiBase('automatic', externalPage, local, production), production)
+  assert.equal(selectApiBase('automatic', externalPage, local, production), local)
   assert.equal(selectApiBase('automatic', 'http://localhost:5176/', local, production), local)
+})
+
+test('automatic mode stays local without overriding explicit modes', () => {
+  const local = 'http://localhost:8000'
+  const production = 'https://api.example.com'
+  const externalPage = 'https://www.healthcare.gov/'
+
+  assert.deepEqual(selectApiBases('automatic', externalPage, local, production), [local])
+  assert.deepEqual(selectApiBases('automatic', 'http://localhost:5176/', local, production), [local])
+  assert.deepEqual(selectApiBases('local', externalPage, local, production), [local])
+  assert.deepEqual(selectApiBases('production', externalPage, local, production), [production])
 })
 
 test('page text is shortened and common sensitive values are removed', () => {

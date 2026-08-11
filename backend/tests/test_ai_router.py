@@ -5,6 +5,9 @@ action allowlist, page-context validation, and response-length enforcement
 are pure functions, so they're exercised directly. The missing-API-key path
 is exercised through the real endpoint since it never reaches the network.
 """
+import threading
+import time
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -15,6 +18,8 @@ from routers.ai import (
     EXTENSION_ACTION_TOOL,
     EXTENSION_GEMINI_TIMEOUT_MS,
     EXTENSION_MODE_LIMITS,
+    EXTENSION_PROVIDER_DEADLINE_SECONDS,
+    EXTENSION_PROVIDER_HEDGE_DELAY_SECONDS,
     EXTENSION_SYSTEM_PROMPT,
     UNAVAILABLE_MESSAGE,
     UNREACHABLE_MESSAGE,
@@ -26,7 +31,7 @@ from routers.ai import (
     validate_extension_action,
 )
 from services.gemini import DEFAULT_GEMINI_MODEL, GeminiServiceError
-from services.groq import DEFAULT_GROQ_MODEL, GroqServiceError
+from services.groq import DEFAULT_GROQ_MODEL, GROQ_TIMEOUT_SECONDS, GroqServiceError
 
 
 @pytest.fixture(scope="module")
@@ -287,6 +292,15 @@ def extension_context(allowed_actions=None):
     )
 
 
+def test_extension_user_facing_provider_deadline_stays_under_five_seconds():
+    assert EXTENSION_GEMINI_TIMEOUT_MS >= 10_000
+    assert EXTENSION_PROVIDER_DEADLINE_SECONDS <= 5.0
+    assert (
+        EXTENSION_PROVIDER_HEDGE_DELAY_SECONDS + GROQ_TIMEOUT_SECONDS
+        <= EXTENSION_PROVIDER_DEADLINE_SECONDS
+    )
+
+
 def test_extension_missing_api_key_returns_graceful_503(client, monkeypatch):
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     monkeypatch.delenv("GROQ_API_KEY", raising=False)
@@ -468,6 +482,43 @@ def test_extension_falls_back_to_groq_when_gemini_fails(client, monkeypatch):
     assert captured["api_key"] == "test-groq-key"
     assert captured["model"] == DEFAULT_GROQ_MODEL
     assert "text-only fallback provider" in captured["system_prompt"]
+
+
+def test_extension_hedges_a_slow_gemini_request_with_groq(client, monkeypatch):
+    release_gemini = threading.Event()
+
+    def slow_gemini(**kwargs):
+        release_gemini.wait(timeout=1)
+        return "Gemini eventually answered.", None
+
+    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
+    monkeypatch.setenv("GROQ_API_KEY", "test-groq-key")
+    monkeypatch.setattr("routers.ai.EXTENSION_PROVIDER_HEDGE_DELAY_SECONDS", 0.01)
+    monkeypatch.setattr("routers.ai.EXTENSION_PROVIDER_DEADLINE_SECONDS", 0.5)
+    monkeypatch.setattr("routers.ai.generate_gemini_content", slow_gemini)
+    monkeypatch.setattr(
+        "routers.ai.generate_groq_content",
+        lambda **kwargs: "Groq answered while Gemini was slow.",
+    )
+
+    started_at = time.monotonic()
+    try:
+        response = client.post(
+            "/api/ai/extension/chat",
+            json={
+                "question": "What does this page do?",
+                "pageContext": extension_context().model_dump(by_alias=True),
+            },
+        )
+    finally:
+        release_gemini.set()
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "message": "Groq answered while Gemini was slow.",
+        "action": None,
+    }
+    assert time.monotonic() - started_at < 0.4
 
 
 def test_extension_can_use_groq_when_primary_key_is_missing(client, monkeypatch):

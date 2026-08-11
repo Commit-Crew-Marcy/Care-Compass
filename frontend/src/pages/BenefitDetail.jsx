@@ -4,6 +4,8 @@ import { getBenefit } from '../api'
 import ExtensionPrompt from '../components/ExtensionPrompt'
 import { useSetPageContext } from '../pageContext'
 
+const NYC_DATASET_PAGE = 'https://data.cityofnewyork.us/d/kvhd-5fmu'
+
 export default function BenefitDetail() {
   const { id } = useParams()
   const { state } = useLocation()
@@ -16,6 +18,11 @@ export default function BenefitDetail() {
 
   const isNycProgram = benefit?.source === 'nyc_open_data'
   const matchReason = state?.matchReason || benefit?.eligibilitySummary || ''
+  const actionLabel = isNycProgram
+    ? benefit?.officialLinkType === 'application'
+      ? 'Apply on the official site ↗'
+      : 'View official program information ↗'
+    : 'Apply on the official site ↗'
 
   // Safe page-context summary — the benefit's public name/description and
   // the visible controls only, never the raw questionnaire intake.
@@ -34,12 +41,12 @@ export default function BenefitDetail() {
         : [],
       visibleControls: [
         { id: 'back-to-results-link', type: 'link', label: 'Back to results' },
-        ...(benefit?.applyUrl ? [{ id: 'apply-official-site-link', type: 'link', label: 'Apply on the official site' }] : []),
+        ...(benefit?.applyUrl ? [{ id: 'apply-official-site-link', type: 'link', label: actionLabel.replace(' ↗', '') }] : []),
       ],
       benefitDetail: benefit ? { name: benefit.name, description: benefit.description } : null,
       matchedBenefits: benefit ? [{ name: benefit.name, description: matchReason }] : [],
     }),
-    [benefit, id, isNycProgram, matchReason]
+    [actionLabel, benefit, id, isNycProgram, matchReason]
   )
   useSetPageContext(pageContext)
 
@@ -103,14 +110,14 @@ export default function BenefitDetail() {
           <ExtensionPrompt />
           <a id="apply-official-site-link" className="btn btn-primary" href={benefit.applyUrl} target="_blank" rel="noreferrer"
             style={{ marginTop: 24 }}>
-            {isNycProgram ? 'Visit the official program site ↗' : 'Apply on the official site ↗'}
+            {actionLabel}
           </a>
         </>
       )}
 
       {isNycProgram && (
         <p className="source-attribution">
-          Source: <a href="https://data.cityofnewyork.us/resource/kvhd-5fmu.json" target="_blank" rel="noreferrer">NYC Benefits and Programs Dataset</a>
+          Directory source: <a href={NYC_DATASET_PAGE} target="_blank" rel="noreferrer">NYC Benefits and Programs Dataset</a>
           {benefit.governmentAgency ? ` · ${benefit.governmentAgency}` : ''}
           {benefit.sourceUpdatedAt ? ` · Updated ${new Date(benefit.sourceUpdatedAt).toLocaleDateString()}` : ''}
         </p>

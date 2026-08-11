@@ -72,7 +72,14 @@
   function selectApiBase(mode, pageUrl, localBase, productionBase) {
     if (mode === 'local') return localBase
     if (mode === 'production') return productionBase
-    return isLocalPageUrl(pageUrl) ? localBase : productionBase
+    // CareCompass is still being tested as an unpacked extension. Automatic
+    // therefore uses the running local backend on every regular website.
+    // Production remains available as an explicit developer setting.
+    return localBase
+  }
+
+  function selectApiBases(mode, pageUrl, localBase, productionBase) {
+    return [selectApiBase(mode, pageUrl, localBase, productionBase)]
   }
 
   function isSafeClickDescriptor(descriptor) {
@@ -135,6 +142,7 @@
     preparePageText,
     redactSensitiveText,
     selectApiBase,
+    selectApiBases,
     validateRequestedAction,
   })
 })

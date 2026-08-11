@@ -3,7 +3,14 @@ from fastapi.testclient import TestClient
 
 from main import app
 from models.schemas import IntakeForm
-from services.nyc_benefits import find_nyc_programs, get_nyc_program, plain_text
+from services.nyc_benefits import (
+    NYC_DATASET_PUBLIC_URL,
+    PROGRAM_OFFICIAL_URLS,
+    find_nyc_programs,
+    get_nyc_program,
+    html_http_urls,
+    plain_text,
+)
 
 
 SAMPLE_RECORDS = [
@@ -71,6 +78,47 @@ def intake(**changes):
 def test_html_from_dataset_is_converted_to_plain_text():
     assert plain_text("<p>Use <strong>simple</strong> text.</p>") == "Use simple text."
     assert plain_text("NULL") == ""
+
+
+def test_safe_official_link_is_extracted_from_html_instructions():
+    links = html_http_urls(
+        '<p>Call <a href="tel:311">311</a> or use the '
+        '<a href="https://www.nyc.gov/help">official help page</a>.</p>'
+    )
+    assert links == ["https://www.nyc.gov/help"]
+
+
+def test_named_programs_with_missing_dataset_urls_receive_official_pages():
+    records = [
+        {
+            "unique_id_number": "P062en",
+            "program_name": "Primary and Preventive Health Care",
+            "program_category": "Health",
+            "brief_excerpt": "Primary care in New York City.",
+        },
+        {
+            "unique_id_number": "P059en",
+            "program_name": "Outpatient Treatment Services",
+            "program_category": "Health",
+            "brief_excerpt": "Outpatient mental health services.",
+        },
+        {
+            "unique_id_number": "P073en",
+            "program_name": "Family Assessment Program",
+            "program_category": "Family Services",
+            "brief_excerpt": "Support for families.",
+        },
+    ]
+
+    for record in records:
+        detail = get_nyc_program(record["unique_id_number"], records=records)
+        assert detail["apply_url"] == PROGRAM_OFFICIAL_URLS[record["unique_id_number"]]
+        assert detail["official_link_type"] == "information"
+
+
+def test_public_dataset_source_is_a_human_readable_page():
+    assert NYC_DATASET_PUBLIC_URL == "https://data.cityofnewyork.us/d/kvhd-5fmu"
+    assert not NYC_DATASET_PUBLIC_URL.endswith(".json")
 
 
 def test_only_selected_categories_are_returned_for_confirmed_nyc_residents():

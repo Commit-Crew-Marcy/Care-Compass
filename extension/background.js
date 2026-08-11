@@ -14,9 +14,9 @@ importScripts('shared.js')
 // ordinary website, not just unsupported ones.
 chrome.action.onClicked.addListener((tab) => {
   if (!tab?.id) return
-  // Start waking a sleeping Render service while the user reads the panel.
-  // This overlaps cold-start time with page-context loading instead of adding
-  // it after the user sends their first question.
+  // Warm the selected backend while the user reads the panel. This overlaps
+  // startup time with page-context loading instead of adding it after the
+  // user sends their first question.
   warmUpApiForPage(tab.url).catch(() => {})
   // sidePanel.open() can throw synchronously (not just reject) for some
   // argument/state errors — wrapped so a failure here can never stop the
@@ -56,6 +56,16 @@ async function apiBaseForPage(pageUrl) {
   )
 }
 
+async function apiBasesForPage(pageUrl) {
+  const mode = await getApiMode()
+  return CareCompassExtension.selectApiBases(
+    mode,
+    pageUrl,
+    LOCAL_API_BASE,
+    PRODUCTION_API_BASE
+  )
+}
+
 async function parseResponse(response) {
   try {
     return await response.json()
@@ -64,12 +74,11 @@ async function parseResponse(response) {
   }
 }
 
-async function requestGemini(body, pageUrl) {
+async function requestGeminiFromBase(body, apiBase) {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
 
   try {
-    const apiBase = await apiBaseForPage(pageUrl)
     const response = await fetch(`${apiBase}${EXTENSION_CHAT_PATH}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -81,6 +90,28 @@ async function requestGemini(body, pageUrl) {
   } finally {
     clearTimeout(timeout)
   }
+}
+
+async function requestGemini(body, pageUrl) {
+  const apiBases = await apiBasesForPage(pageUrl)
+  let lastResponse = null
+  let lastError = null
+
+  for (const apiBase of apiBases) {
+    try {
+      const result = await requestGeminiFromBase(body, apiBase)
+      lastResponse = result
+      // Validation and other client errors belong to the request, not the
+      // server connection, so another backend would return the same result.
+      // Automatic fallback is reserved for server/provider failures.
+      if (result.response.ok || result.response.status < 500) return result
+    } catch (error) {
+      lastError = error
+    }
+  }
+
+  if (lastResponse) return lastResponse
+  throw lastError || new Error('No CareCompass API could be reached')
 }
 
 async function warmUpApiForPage(pageUrl) {
