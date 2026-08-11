@@ -5,6 +5,7 @@
 // this is just a navigation convenience cache, not a saved record.
 const RESULTS_KEY = 'carecompass_latest_results'
 const ANSWERS_KEY = 'carecompass_latest_answers'
+const METADATA_KEY = 'carecompass_latest_result_metadata'
 
 function readJson(key) {
   const raw = localStorage.getItem(key)
@@ -17,19 +18,21 @@ function readJson(key) {
   }
 }
 
-export function saveLatestScreening(results, intake) {
+export function saveLatestScreening(results, intake, metadata = {}) {
   localStorage.setItem(RESULTS_KEY, JSON.stringify(results))
   localStorage.setItem(ANSWERS_KEY, JSON.stringify(intake ?? null))
+  localStorage.setItem(METADATA_KEY, JSON.stringify(metadata))
 }
 
-// Returns { results, intake } or null if nothing valid is cached.
+// Returns { results, intake, metadata } or null if nothing valid is cached.
 export function loadLatestScreening() {
   const results = readJson(RESULTS_KEY)
   if (!results) return null
-  return { results, intake: readJson(ANSWERS_KEY) }
+  return { results, intake: readJson(ANSWERS_KEY), metadata: readJson(METADATA_KEY) || {} }
 }
 
 export function clearLatestScreening() {
   localStorage.removeItem(RESULTS_KEY)
   localStorage.removeItem(ANSWERS_KEY)
+  localStorage.removeItem(METADATA_KEY)
 }

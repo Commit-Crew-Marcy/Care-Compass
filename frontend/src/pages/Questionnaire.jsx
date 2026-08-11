@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { checkEligibility } from '../api'
+import { checkEligibility, scorePolicyEngineEligibility, searchCMSMarketplacePlans } from '../api'
 import { saveLatestScreening } from '../resultsStorage'
 import { useSetPageContext } from '../pageContext'
-import { validateAge, validateIncome } from '../validation'
+import { validateAge, validateIncome, validateOptionalZipCode } from '../validation'
 
 // How long to wait before showing the "server may be waking up" notice —
 // Render's free tier can take up to ~60s to spin up a sleeping instance.
@@ -22,9 +22,9 @@ function messageForSubmitError(err) {
   return 'CareCompass could not process your answers right now. Please try again.'
 }
 
-// The 7-step wizard. One small group of questions per step so the form
+// The 8-step wizard. One small group of questions per step so the form
 // never overwhelms the user. Progress lives in a fixed bar at the bottom.
-// Step 4 (immigration) is optional by design: "prefer not to say" still
+// The immigration step is optional by design: "prefer not to say" still
 // returns every program without a status requirement.
 
 const STATES = [
@@ -119,34 +119,178 @@ const HELP_CATEGORIES = [
   { key: 'work_education', label: 'Work and education' },
 ]
 
-const TOTAL_STEPS = 7
+const TOTAL_STEPS = 8
 
 // Safe, structural-only descriptions of each step for the AI Guide — labels
 // only, never the values the user has entered.
 const STEP_HEADINGS = {
-  1: 'First, tell us your age and state',
+  1: 'First, tell us your age, state, and optional ZIP code',
   2: 'Tell us about your household',
-  3: 'Tell us about you and your family',
-  4: 'Are you new to the United States?',
-  5: 'Do you currently have health insurance?',
-  6: 'What kind of help are you looking for?',
-  7: 'Review your information',
+  3: 'Who else lives in your household?',
+  4: 'Tell us about you and your family',
+  5: 'Are you new to the United States?',
+  6: 'Do you currently have health insurance?',
+  7: 'What kind of help are you looking for?',
+  8: 'Review your information',
 }
 
 const STEP_FIELD_CONTROLS = {
   1: [
     { id: 'age', type: 'input', label: 'Your age' },
     { id: 'state', type: 'select', label: 'Your state' },
+    { id: 'zip-code', type: 'input', label: 'ZIP code for Marketplace plan estimates' },
   ],
   2: [
     { id: 'income', type: 'input', label: 'Annual household income' },
     { id: 'household', type: 'input', label: 'How many people live in your household' },
   ],
-  3: [{ id: 'step-heading', type: 'heading', label: 'Do you have a disability, long-term condition, or support need?' }],
-  4: [{ id: 'step-heading', type: 'heading', label: 'Are you new to the United States?' }],
-  5: [{ id: 'step-heading', type: 'heading', label: 'Do you currently have health insurance?' }],
-  6: [{ id: 'help-categories', type: 'group', label: 'Types of help' }],
-  7: [],
+  3: [{ id: 'household-members', type: 'group', label: 'Other household members' }],
+  4: [{ id: 'step-heading', type: 'heading', label: 'Do you have a disability, long-term condition, or support need?' }],
+  5: [{ id: 'step-heading', type: 'heading', label: 'Are you new to the United States?' }],
+  6: [{ id: 'step-heading', type: 'heading', label: 'Do you currently have health insurance?' }],
+  7: [{ id: 'help-categories', type: 'group', label: 'Types of help' }],
+  8: [],
+}
+
+function newHouseholdMember(index) {
+  return {
+    id: `person-${index + 2}`,
+    relationship: 'dependent',
+    age: '',
+    annualEmploymentIncome: '0',
+    isDisabled: false,
+    isPregnant: false,
+    usesTobacco: false,
+  }
+}
+
+function mergePolicyEnginePrograms(localResults, catalog) {
+  if (!catalog?.programs) return localResults
+  const merged = localResults.map((result) => ({ ...result }))
+  const mergeableTypes = new Set([
+    'medicare_part_a', 'msp', 'medicaid', 'chip', 'marketplace', 'snap', 'wic',
+    'school_lunch', 'ssi', 'eitc', 'ctc', 'housing', 'tanf',
+  ])
+  catalog.programs.forEach((program) => {
+    const existingIndex = mergeableTypes.has(program.programType)
+      ? merged.findIndex((result) => (
+          result.programType === program.programType
+          && result.source !== 'policyengine'
+          && result.source !== 'nyc_open_data'
+        ))
+      : -1
+    const catalogDetails = {
+      policyEngineCatalog: true,
+      policyEngineScope: program.scope,
+      policyEngineMatchReason: program.matchReason,
+      policyEngineEligibilityStatus: program.eligibilityStatus,
+      policyEngineCalculationReason: program.calculationReason,
+      policyEngineCalculationYear: program.calculationYear,
+      policyEngineModelCalculated: program.modelCalculated,
+    }
+    if (existingIndex >= 0) {
+      merged[existingIndex] = {
+        ...merged[existingIndex],
+        ...(program.scope === 'state' ? { name: program.name } : {}),
+        ...(program.estimatedAnnualAmount != null
+          ? { estimatedAnnualAmount: program.estimatedAnnualAmount }
+          : {}),
+        ...catalogDetails,
+      }
+    } else {
+      merged.push({ ...program, ...catalogDetails })
+    }
+  })
+  return merged
+}
+
+function cmsMarketplacePlanCard(plan, marketplace) {
+  const price = plan.premiumWithCredit ?? plan.premium
+  const planDescription = [plan.metalLevel, plan.planType, 'health plan']
+    .filter(Boolean)
+    .join(' ')
+  const issuerText = plan.issuer ? ` from ${plan.issuer}` : ''
+  const priceText = price != null
+    ? `Estimated monthly premium: $${Number(price).toLocaleString(undefined, { maximumFractionDigits: 2 })}.`
+    : 'Contact the Marketplace for a current premium estimate.'
+  return {
+    id: `cms-marketplace-${marketplace.year}-${plan.id}`,
+    externalId: plan.id,
+    name: plan.name,
+    description: `${planDescription}${issuerText}.`,
+    eligibilitySummary: priceText,
+    matchReason: `CMS returned this ${marketplace.year} plan for ${marketplace.countyName} using the household and ZIP code information you provided. Prices are estimates until the Marketplace verifies the application.`,
+    applyUrl: marketplace.marketplaceUrl,
+    officialLinkType: 'application',
+    programType: 'marketplace_plan',
+    source: 'cms_marketplace',
+    cmsMarketplace: true,
+    cmsMarketplaceYear: marketplace.year,
+    cmsMarketplaceName: marketplace.marketplaceName,
+    cmsMarketplaceSourceUrl: marketplace.sourceUrl,
+    countyName: marketplace.countyName,
+    issuer: plan.issuer,
+    metalLevel: plan.metalLevel,
+    planType: plan.planType,
+    premium: plan.premium,
+    premiumWithCredit: plan.premiumWithCredit,
+    monthlySavings: plan.monthlySavings,
+    deductible: plan.deductible,
+    maximumOutOfPocket: plan.maximumOutOfPocket,
+    costScope: plan.costScope,
+    qualityRating: plan.qualityRating,
+    hsaEligible: plan.hsaEligible,
+    guaranteedRate: plan.guaranteedRate,
+    benefitsUrl: plan.benefitsUrl,
+    brochureUrl: plan.brochureUrl,
+    networkUrl: plan.networkUrl,
+    issuerUrl: plan.issuerUrl,
+  }
+}
+
+function cmsStateMarketplaceCard(marketplace) {
+  const marketplaceName = marketplace.marketplaceName || 'Your state Marketplace'
+  const stateName = marketplace.stateName || marketplace.state
+  return {
+    id: `cms-marketplace-${marketplace.year}-${marketplace.state.toLowerCase()}-state`,
+    name: marketplaceName,
+    description: `The official state-run health insurance Marketplace serving ${stateName}.`,
+    eligibilitySummary: 'Review current health plans, prices, financial help, and enrollment options on the official state Marketplace.',
+    matchReason: `CMS identifies ${marketplaceName} as the official state-run Marketplace for ${stateName}. CMS does not provide plan-level premium estimates for states that operate their own Marketplace platform.`,
+    applyUrl: marketplace.marketplaceUrl,
+    officialLinkType: 'information',
+    programType: 'marketplace_directory',
+    source: 'cms_marketplace_directory',
+    cmsMarketplace: true,
+    cmsMarketplaceDirectory: true,
+    cmsMarketplaceYear: marketplace.year,
+    cmsMarketplaceName: marketplaceName,
+    cmsMarketplaceModel: marketplace.marketplaceModel,
+    cmsMarketplaceSourceUrl: marketplace.sourceUrl,
+    countyName: marketplace.countyName,
+    estimatedAnnualAmount: null,
+  }
+}
+
+export function mergeCMSMarketplacePlans(results, marketplace) {
+  if (!marketplace) return results
+  if (marketplace.planEstimatesAvailable === false) {
+    const directoryCard = cmsStateMarketplaceCard(marketplace)
+    const existingMarketplaceIndex = results.findIndex(
+      (result) => result.programType === 'marketplace'
+    )
+    if (existingMarketplaceIndex < 0) return [...results, directoryCard]
+    return results.map((result, index) => (
+      index === existingMarketplaceIndex
+        ? { ...result, ...directoryCard }
+        : result
+    ))
+  }
+  if (!marketplace.plans?.length) return results
+  return [
+    ...results,
+    ...marketplace.plans.map((plan) => cmsMarketplacePlanCard(plan, marketplace)),
+  ]
 }
 
 export default function Questionnaire() {
@@ -155,6 +299,7 @@ export default function Questionnaire() {
   const [error, setError] = useState('')
   const [ageError, setAgeError] = useState('')
   const [incomeError, setIncomeError] = useState('')
+  const [zipError, setZipError] = useState('')
   const [loading, setLoading] = useState(false)
   const [waking, setWaking] = useState(false)
   const submitErrorRef = useRef(null)
@@ -164,9 +309,11 @@ export default function Questionnaire() {
   const [form, setForm] = useState({
     age: '',
     state: '',
+    zipCode: '',
     nycResident: null,
     income: '',
     householdSize: '1',
+    additionalPeople: [],
     disabilityStatus: null,       // null = no selection, true = yes, false = no
     disabilityDetails: [],
     disabilityOtherText: '',
@@ -181,10 +328,35 @@ export default function Questionnaire() {
     insuranceStatus: false,
     currentCoverage: [],
     otherCoverageText: '',
+    usesTobacco: false,
     helpCategories: [],
   })
 
   const set = (field, value) => setForm((f) => ({ ...f, [field]: value }))
+
+  const updateHouseholdSize = (value) => {
+    const parsed = Number(value)
+    setForm((current) => {
+      if (!Number.isInteger(parsed) || parsed < 1 || parsed > 12) {
+        return { ...current, householdSize: value }
+      }
+      const count = parsed - 1
+      const additionalPeople = Array.from(
+        { length: count },
+        (_, index) => current.additionalPeople[index] || newHouseholdMember(index)
+      )
+      return { ...current, householdSize: value, additionalPeople }
+    })
+  }
+
+  const updateHouseholdMember = (index, field, value) => {
+    setForm((current) => ({
+      ...current,
+      additionalPeople: current.additionalPeople.map((person, personIndex) =>
+        personIndex === index ? { ...person, [field]: value } : person
+      ),
+    }))
+  }
 
   // A submit error is rendered beside the submit button. Move focus there so
   // keyboard and screen-reader users do not miss it after a failed request.
@@ -206,7 +378,7 @@ export default function Questionnaire() {
     }
   }, [form.insuranceStatus])
 
-  const validationMessages = [error, ageError, incomeError, childUnder5Error].filter(Boolean)
+  const validationMessages = [error, ageError, incomeError, zipError, childUnder5Error].filter(Boolean)
 
   const navControls = [
     ...(step > 1 ? [{ id: 'back-button', type: 'button', label: 'Back' }] : []),
@@ -225,7 +397,7 @@ export default function Questionnaire() {
       validationMessages,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [step, error, ageError, incomeError, childUnder5Error]
+    [step, error, ageError, incomeError, zipError, childUnder5Error]
   )
   useSetPageContext(pageContext)
 
@@ -272,15 +444,39 @@ export default function Questionnaire() {
     if (step === 1) {
       return validateAge(form.age) === ''
         && form.state !== ''
+        && validateOptionalZipCode(form.zipCode) === ''
         && (form.state !== 'NY' || form.nycResident !== null)
     }
-    if (step === 2) return validateIncome(form.income) === '' && Number(form.householdSize) >= 1
+    if (step === 2) {
+      return validateIncome(form.income) === ''
+        && Number.isInteger(Number(form.householdSize))
+        && Number(form.householdSize) >= 1
+        && Number(form.householdSize) <= 12
+    }
     if (step === 3) {
+      const peopleAreValid = form.additionalPeople.length === Number(form.householdSize) - 1
+        && form.additionalPeople.every((person) => (
+          person.age !== ''
+          && Number.isInteger(Number(person.age))
+          && Number(person.age) >= 0
+          && Number(person.age) <= 120
+          && person.annualEmploymentIncome !== ''
+          && Number(person.annualEmploymentIncome) >= 0
+          && Number(person.annualEmploymentIncome) <= 10_000_000
+        ))
+      const spouseCount = form.additionalPeople.filter((person) => person.relationship === 'spouse').length
+      const otherIncome = form.additionalPeople.reduce(
+        (total, person) => total + Number(person.annualEmploymentIncome || 0),
+        0
+      )
+      return peopleAreValid && spouseCount <= 1 && otherIncome <= Number(form.income)
+    }
+    if (step === 4) {
       if (form.disabilityStatus === null) return false
       return true
     }
-    if (step === 4 && form.immigrationStatus === 'green_card') return form.yearsInUs !== ''
-    if (step === 6) return form.helpCategories.length > 0
+    if (step === 5 && form.immigrationStatus === 'green_card') return form.yearsInUs !== ''
+    if (step === 7) return form.helpCategories.length > 0
     return true
   }
 
@@ -289,6 +485,9 @@ export default function Questionnaire() {
       const ae = validateAge(form.age)
       if (ae) { setAgeError(ae); return }
       setAgeError('')
+      const ze = validateOptionalZipCode(form.zipCode)
+      if (ze) { setZipError(ze); return }
+      setZipError('')
       if (!form.state) {
         setError('Please select your state before continuing.')
         return
@@ -305,8 +504,8 @@ export default function Questionnaire() {
       const ie = validateIncome(form.income)
       if (ie) { setIncomeError(ie); return }
       setIncomeError('')
-      if (Number(form.householdSize) < 1) {
-        setError('Please enter a valid household size before continuing.')
+      if (!Number.isInteger(Number(form.householdSize)) || Number(form.householdSize) < 1 || Number(form.householdSize) > 12) {
+        setError('Enter a household size from 1 to 12 before continuing.')
         return
       }
       setError('')
@@ -314,6 +513,31 @@ export default function Questionnaire() {
       return
     }
     if (step === 3) {
+      if (!stepValid()) {
+        const otherIncome = form.additionalPeople.reduce(
+          (total, person) => total + Number(person.annualEmploymentIncome || 0),
+          0
+        )
+        setError(otherIncome > Number(form.income)
+          ? 'The other household members’ work income cannot exceed the total household income.'
+          : 'Enter an age, relationship, and yearly work income for each household member.')
+        return
+      }
+      const childMembers = form.additionalPeople.filter(
+        (person) => person.relationship !== 'spouse' && Number(person.age) < 18
+      )
+      if (childMembers.length > 0) {
+        setForm((current) => ({
+          ...current,
+          hasChildrenUnder18: true,
+          hasChildrenUnder5: childMembers.some((person) => Number(person.age) < 5),
+        }))
+      }
+      setError('')
+      setStep((s) => Math.min(s + 1, TOTAL_STEPS))
+      return
+    }
+    if (step === 4) {
       if (form.disabilityStatus === null) {
         setError('Please answer the disability question before continuing.')
         return
@@ -327,7 +551,7 @@ export default function Questionnaire() {
       setStep((s) => Math.min(s + 1, TOTAL_STEPS))
       return
     }
-    if (step === 6 && form.helpCategories.length === 0) {
+    if (step === 7 && form.helpCategories.length === 0) {
       setError('Select at least one type of help, or choose “Show me all kinds of help.”')
       return
     }
@@ -350,6 +574,16 @@ export default function Questionnaire() {
     setError('')
     const wakeTimer = setTimeout(() => setWaking(true), WAKE_NOTICE_DELAY_MS)
     try {
+      const householdHasChild = form.additionalPeople.some(
+        (person) => person.relationship !== 'spouse' && Number(person.age) < 18
+      )
+      const householdHasYoungChild = form.additionalPeople.some(
+        (person) => person.relationship !== 'spouse' && Number(person.age) < 5
+      )
+      const householdHasDisability = form.disabilityStatus === true
+        || form.additionalPeople.some((person) => person.isDisabled)
+      const householdHasPregnancy = form.isPregnant
+        || form.additionalPeople.some((person) => person.isPregnant)
       const intake = {
         age: Number(form.age),
         income: Number(form.income),
@@ -357,13 +591,13 @@ export default function Questionnaire() {
         nycResident: form.state === 'NY' && form.nycResident === true,
         helpCategories: form.helpCategories,
         householdSize: Number(form.householdSize),
-        disabilityStatus: form.disabilityStatus === true,
+        disabilityStatus: householdHasDisability,
         // Descriptive field — saved for context only, does not affect eligibility matching
         disabilityDetails: form.disabilityStatus === true ? form.disabilityDetails : [],
         veteranStatus: form.veteranStatus,
-        isPregnant: form.isPregnant,
-        hasChildrenUnder18: form.hasChildrenUnder18,
-        hasChildrenUnder5: form.hasChildrenUnder18 ? form.hasChildrenUnder5 === true : false,
+        isPregnant: householdHasPregnancy,
+        hasChildrenUnder18: form.hasChildrenUnder18 || householdHasChild,
+        hasChildrenUnder5: form.hasChildrenUnder5 === true || householdHasYoungChild,
         immigrationStatus: form.immigrationStatus,
         yearsInUs: form.immigrationStatus === 'green_card' && form.yearsInUs !== ''
           ? Number(form.yearsInUs)
@@ -373,9 +607,107 @@ export default function Questionnaire() {
         // the rules engine doesn't recognize it as a coverage type.
         currentCoverage: form.currentCoverage.filter((c) => c !== 'other'),
       }
-      const results = await checkEligibility(intake)
-      saveLatestScreening(results, intake)
-      navigate('/results', { state: { results, intake } })
+      const policyEngineIntake = {
+        age: intake.age,
+        income: intake.income,
+        state: intake.state,
+        householdSize: intake.householdSize,
+        // PolicyEngine receives person-level flags below; do not reuse the
+        // household-wide rollups sent to CareCompass's rules engine.
+        disabilityStatus: form.disabilityStatus === true,
+        isPregnant: form.isPregnant,
+        immigrationStatus: intake.immigrationStatus,
+        yearsInUs: intake.yearsInUs,
+        insuranceStatus: intake.insuranceStatus,
+        currentCoverage: intake.currentCoverage,
+        additionalPeople: form.additionalPeople.map((person) => ({
+          relationship: person.relationship,
+          age: Number(person.age),
+          annualEmploymentIncome: Number(person.annualEmploymentIncome || 0),
+          isDisabled: person.isDisabled,
+          isPregnant: person.isPregnant,
+        })),
+      }
+      const cmsMarketplaceRequested = Boolean(
+        form.zipCode
+        && (form.helpCategories.includes('all') || form.helpCategories.includes('health'))
+      )
+      const cmsMarketplaceIntake = cmsMarketplaceRequested ? {
+        state: intake.state,
+        zipCode: form.zipCode,
+        income: intake.income,
+        immigrationStatus: intake.immigrationStatus,
+        currentCoverage: intake.currentCoverage,
+        people: [
+          {
+            age: intake.age,
+            relationship: 'self',
+            isPregnant: form.isPregnant,
+            usesTobacco: form.usesTobacco,
+          },
+          ...form.additionalPeople.map((person) => ({
+            age: Number(person.age),
+            relationship: person.relationship,
+            isPregnant: person.isPregnant,
+            usesTobacco: person.usesTobacco,
+          })),
+        ],
+      } : null
+      const [eligibilityResult, policyEngineResult, cmsMarketplaceResult] = await Promise.allSettled([
+        checkEligibility(intake),
+        scorePolicyEngineEligibility(policyEngineIntake),
+        cmsMarketplaceRequested
+          ? searchCMSMarketplacePlans(cmsMarketplaceIntake)
+          : Promise.resolve(null),
+      ])
+      if (eligibilityResult.status === 'rejected') throw eligibilityResult.reason
+
+      const catalog = policyEngineResult.status === 'fulfilled' ? policyEngineResult.value : null
+      const marketplace = cmsMarketplaceResult.status === 'fulfilled'
+        ? cmsMarketplaceResult.value
+        : null
+      const results = mergeCMSMarketplacePlans(
+        mergePolicyEnginePrograms(eligibilityResult.value, catalog),
+        marketplace
+      )
+      const metadata = {
+        policyEngineCatalogUnavailable: policyEngineResult.status === 'rejected',
+        policyEngineCatalogState: catalog?.state || form.state,
+        policyEngineCatalogStateName: catalog?.stateName || null,
+        policyEngineCatalogCount: catalog?.programs?.length || 0,
+        policyEngineCatalogSource: catalog?.sourceRepository || null,
+        policyEngineCatalogCommit: catalog?.sourceCommit || null,
+        policyEngineCalculationAvailable: catalog?.calculationAvailable === true,
+        policyEngineCalculationYear: catalog?.calculationYear || null,
+        policyEngineCalculationNote: catalog?.calculationNote || null,
+        cmsMarketplaceRequested,
+        cmsMarketplaceUnavailable: cmsMarketplaceRequested
+          && cmsMarketplaceResult.status === 'rejected',
+        cmsMarketplaceYear: marketplace?.year || null,
+        cmsMarketplaceState: marketplace?.stateName || marketplace?.state || form.state,
+        cmsMarketplaceCountyName: marketplace?.countyName || null,
+        cmsMarketplaceName: marketplace?.marketplaceName || null,
+        cmsMarketplaceUrl: marketplace?.marketplaceUrl || null,
+        cmsMarketplaceModel: marketplace?.marketplaceModel || null,
+        cmsMarketplacePlanEstimatesAvailable: marketplace?.planEstimatesAvailable !== false,
+        cmsMarketplaceTotal: marketplace?.total || 0,
+        cmsMarketplacePlanCount: marketplace?.plans?.length || 0,
+        cmsMarketplaceSourceUrl: marketplace?.sourceUrl || null,
+      }
+      if (import.meta.env.DEV && policyEngineResult.status === 'rejected') {
+        console.warn('PolicyEngine eligibility request failed; showing CareCompass matches only', {
+          status: policyEngineResult.reason?.status,
+          detail: policyEngineResult.reason?.detail,
+        })
+      }
+      if (import.meta.env.DEV && cmsMarketplaceRequested && cmsMarketplaceResult.status === 'rejected') {
+        console.warn('CMS Marketplace request failed; showing other CareCompass results', {
+          status: cmsMarketplaceResult.reason?.status,
+          detail: cmsMarketplaceResult.reason?.detail,
+        })
+      }
+      saveLatestScreening(results, intake, metadata)
+      navigate('/results', { state: { results, intake, metadata } })
     } catch (err) {
       if (import.meta.env.DEV) {
         // Structured diagnostics only — never log the user's answers.
@@ -396,6 +728,11 @@ export default function Questionnaire() {
 
   const immigrationLabel =
     IMMIGRATION_OPTIONS.find((o) => o.key === form.immigrationStatus)?.label || ''
+  const additionalChildren = form.additionalPeople.filter(
+    (person) => person.relationship !== 'spouse' && Number(person.age) < 18
+  )
+  const householdHasYoungChild = additionalChildren.some((person) => Number(person.age) < 5)
+  const householdHasPregnancy = form.isPregnant || form.additionalPeople.some((person) => person.isPregnant)
 
   return (
     <main className="container">
@@ -453,6 +790,7 @@ export default function Questionnaire() {
                   setForm((current) => ({
                     ...current,
                     state,
+                    zipCode: state === current.state ? current.zipCode : '',
                     nycResident: state === 'NY'
                       ? (current.state === 'NY' ? current.nycResident : null)
                       : false,
@@ -466,6 +804,34 @@ export default function Questionnaire() {
               </select>
               <p className="field-hint">Programs and income limits may differ by state.</p>
             </div>
+          </div>
+
+          <div className="field-group">
+            <label htmlFor="zip-code">ZIP code (optional)</label>
+            <input
+              id="zip-code"
+              type="text"
+              inputMode="numeric"
+              autoComplete="postal-code"
+              maxLength={5}
+              placeholder="For example, 70802"
+              value={form.zipCode}
+              aria-invalid={zipError ? 'true' : 'false'}
+              aria-describedby={zipError ? 'zip-code-error' : 'zip-code-hint'}
+              onChange={(e) => {
+                const value = e.target.value.replace(/[^0-9]/g, '').slice(0, 5)
+                set('zipCode', value)
+                if (zipError) setZipError(validateOptionalZipCode(value))
+              }}
+            />
+            {zipError
+              ? <p id="zip-code-error" className="field-error" role="alert">{zipError}</p>
+              : (
+                <p id="zip-code-hint" className="field-hint">
+                  Add your ZIP code to see current CMS Marketplace plans and premium estimates.
+                  CareCompass sends no name, address, or Social Security number to CMS.
+                </p>
+                )}
           </div>
 
           {form.state === 'NY' && (
@@ -537,12 +903,109 @@ export default function Questionnaire() {
           </div>
 
           <label htmlFor="household">How many people live in your household?</label>
-          <input id="household" type="number" min="1" value={form.householdSize}
-            onChange={(e) => set('householdSize', e.target.value)} />
+          <input id="household" type="number" min="1" max="12" step="1" value={form.householdSize}
+            onChange={(e) => updateHouseholdSize(e.target.value)} />
+          <p className="field-hint">Include yourself, a spouse, children, and other people who share finances with you.</p>
+
         </>
       )}
 
       {step === 3 && (
+        <>
+          <h1 id="step-heading">Who else lives in your household?</h1>
+          <p className="subtitle">
+            This helps CareCompass recognize child, family, disability, and pregnancy-related programs.
+          </p>
+          {form.additionalPeople.length === 0 ? (
+            <div className="source-notice" role="status">
+              You entered a one-person household, so there are no other people to add.
+            </div>
+          ) : (
+            <div id="household-members" className="household-member-list">
+              {form.additionalPeople.map((person, index) => {
+                const anotherSpouseSelected = form.additionalPeople.some(
+                  (candidate, candidateIndex) => candidateIndex !== index && candidate.relationship === 'spouse'
+                )
+                return (
+                  <fieldset className="household-member-card" key={person.id}>
+                    <legend>Person {index + 2}</legend>
+                    <div className="field-row">
+                      <div className="field-group">
+                        <label htmlFor={`relationship-${index}`}>Relationship to you</label>
+                        <select
+                          id={`relationship-${index}`}
+                          value={person.relationship}
+                          onChange={(e) => updateHouseholdMember(index, 'relationship', e.target.value)}
+                        >
+                          <option value="dependent">Child or tax dependent</option>
+                          <option value="spouse" disabled={anotherSpouseSelected}>Spouse</option>
+                          <option value="other">Other tax dependent</option>
+                        </select>
+                      </div>
+                      <div className="field-group">
+                        <label htmlFor={`person-age-${index}`}>Age</label>
+                        <input
+                          id={`person-age-${index}`}
+                          type="number"
+                          min="0"
+                          max="120"
+                          step="1"
+                          value={person.age}
+                          onChange={(e) => updateHouseholdMember(index, 'age', e.target.value)}
+                        />
+                      </div>
+                    </div>
+                    <div className="field-group">
+                      <label htmlFor={`person-income-${index}`}>Yearly employment income</label>
+                      <input
+                        id={`person-income-${index}`}
+                        type="number"
+                        min="0"
+                        max="10000000"
+                        step="1"
+                        value={person.annualEmploymentIncome}
+                        onChange={(e) => updateHouseholdMember(index, 'annualEmploymentIncome', e.target.value)}
+                      />
+                      <p className="field-hint">Enter 0 if this person has no income from work.</p>
+                    </div>
+                    <div className="household-member-flags">
+                      <label className={`check-card ${person.isDisabled ? 'selected' : ''}`}>
+                        <input
+                          type="checkbox"
+                          checked={person.isDisabled}
+                          onChange={(e) => updateHouseholdMember(index, 'isDisabled', e.target.checked)}
+                        />
+                        This person has a disability
+                      </label>
+                      <label className={`check-card ${person.isPregnant ? 'selected' : ''}`}>
+                        <input
+                          type="checkbox"
+                          checked={person.isPregnant}
+                          onChange={(e) => updateHouseholdMember(index, 'isPregnant', e.target.checked)}
+                        />
+                        This person is pregnant
+                      </label>
+                      <label className={`check-card ${person.usesTobacco ? 'selected' : ''}`}>
+                        <input
+                          type="checkbox"
+                          checked={person.usesTobacco}
+                          onChange={(e) => updateHouseholdMember(index, 'usesTobacco', e.target.checked)}
+                        />
+                        This person currently uses tobacco
+                      </label>
+                    </div>
+                  </fieldset>
+                )
+              })}
+            </div>
+          )}
+          <p className="disclaimer">
+            The work-income amounts for other people should already be included in the total household income you entered.
+          </p>
+        </>
+      )}
+
+      {step === 4 && (
         <>
           <h1 id="step-heading">Tell us about you and your family</h1>
           <p className="subtitle">Select everything that applies. Each one unlocks different programs.</p>
@@ -711,7 +1174,7 @@ export default function Questionnaire() {
         </>
       )}
 
-      {step === 4 && (
+      {step === 5 && (
         <>
           <h1 id="step-heading">Are you new to the United States?</h1>
           <p className="subtitle">
@@ -743,7 +1206,7 @@ export default function Questionnaire() {
         </>
       )}
 
-      {step === 5 && (
+      {step === 6 && (
         <>
           <h1 id="step-heading">Do you currently have health insurance?</h1>
           <p className="subtitle">Even if you do, you may still qualify for additional programs.</p>
@@ -814,14 +1277,26 @@ export default function Questionnaire() {
               )}
             </div>
           )}
+
+          <label className={`check-card ${form.usesTobacco ? 'selected' : ''}`}>
+            <input
+              type="checkbox"
+              checked={form.usesTobacco}
+              onChange={(e) => set('usesTobacco', e.target.checked)}
+            />
+            I currently use tobacco
+          </label>
+          <p className="field-hint">
+            CMS uses tobacco status only to improve Marketplace premium estimates where state rules allow it.
+          </p>
         </>
       )}
 
-      {step === 6 && (
+      {step === 7 && (
         <>
           <h1 id="step-heading">What kind of help are you looking for?</h1>
           <p className="subtitle">
-            Select one or more. This helps us keep New York City directory results short and useful.
+            Select one or more. This keeps directory and Marketplace results focused and useful.
           </p>
           <fieldset id="help-categories" className="ds-detail-fieldset">
             <legend className="sr-only">Types of help</legend>
@@ -842,17 +1317,18 @@ export default function Questionnaire() {
             </div>
           </fieldset>
           <p className="disclaimer">
-            These choices filter directory suggestions only. They do not change whether you qualify.
+            These choices filter suggestions and plan results. They do not change whether you qualify.
           </p>
         </>
       )}
 
-      {step === 7 && (
+      {step === 8 && (
         <>
           <h1 id="step-heading">Review your information</h1>
           <p className="subtitle">Make sure everything looks right before we find your matches.</p>
           <div className="review-row"><span>Age</span><span>{form.age}</span></div>
           <div className="review-row"><span>State</span><span>{form.state}</span></div>
+          {form.zipCode && <div className="review-row"><span>ZIP code</span><span>{form.zipCode}</span></div>}
           {form.state === 'NY' && (
             <div className="review-row">
               <span>New York City resident</span>
@@ -861,6 +1337,15 @@ export default function Questionnaire() {
           )}
           <div className="review-row"><span>Annual income</span><span>${Number(form.income).toLocaleString()}</span></div>
           <div className="review-row"><span>Household size</span><span>{form.householdSize}</span></div>
+          {form.additionalPeople.map((person, index) => (
+            <div className="review-row" key={person.id}>
+              <span>Person {index + 2}</span>
+              <span>
+                {person.relationship} · age {person.age} · ${Number(person.annualEmploymentIncome || 0).toLocaleString()} work income
+                {person.usesTobacco ? ' · uses tobacco' : ''}
+              </span>
+            </div>
+          ))}
           <div className="review-row">
             <span>Disability</span>
             <span>
@@ -880,12 +1365,12 @@ export default function Questionnaire() {
             </div>
           )}
           <div className="review-row"><span>Veteran</span><span>{form.veteranStatus ? 'Yes' : 'No'}</span></div>
-          <div className="review-row"><span>Pregnancy in household</span><span>{form.isPregnant ? 'Yes' : 'No'}</span></div>
+          <div className="review-row"><span>Pregnancy in household</span><span>{householdHasPregnancy ? 'Yes' : 'No'}</span></div>
           <div className="review-row">
             <span>Children</span>
             <span>
-              {form.hasChildrenUnder18
-                ? (form.hasChildrenUnder5 === true
+              {(form.hasChildrenUnder18 || additionalChildren.length > 0)
+                ? ((form.hasChildrenUnder5 === true || householdHasYoungChild)
                     ? 'Children under 18, including a child under 5'
                     : 'Children under 18')
                 : 'None'}
@@ -904,6 +1389,7 @@ export default function Questionnaire() {
             <span>Insurance</span>
             <span>{form.insuranceStatus ? (form.currentCoverage.join(', ') || 'Yes') : 'None'}</span>
           </div>
+          <div className="review-row"><span>Tobacco use</span><span>{form.usesTobacco ? 'Yes' : 'No'}</span></div>
           {form.insuranceStatus === true && form.currentCoverage.includes('other') && form.otherCoverageText && (
             <div className="review-row">
               <span>Other health coverage</span>

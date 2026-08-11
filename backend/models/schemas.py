@@ -5,7 +5,7 @@ Pydantic handles the mapping via alias generators, which is what the
 """
 from typing import List, Literal, Optional, Union
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic.alias_generators import to_camel
 
 # The five answers a user can give on the immigration step. "prefer_not"
@@ -235,6 +235,184 @@ class ExtensionChatResponse(CamelModel):
 
 class Message(CamelModel):
     message: str
+
+
+# ---------- PolicyEngine US program catalog ----------
+
+StateCode = Literal[
+    "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA",
+    "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD",
+    "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ",
+    "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC",
+    "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY",
+    "DC",
+]
+
+
+class PolicyEngineCatalogProgram(CamelModel):
+    id: str
+    name: str
+    description: str
+    eligibility_summary: str
+    match_reason: str
+    program_type: str
+    apply_url: str
+    source: Literal["policyengine"] = "policyengine"
+    scope: Literal["federal", "state"]
+    state: Optional[StateCode] = None
+
+
+class PolicyEngineProgramCatalog(CamelModel):
+    state: StateCode
+    state_name: str
+    programs: List[PolicyEngineCatalogProgram] = Field(default_factory=list)
+    source_repository: str
+    source_commit: str
+    catalog_note: str
+
+
+PolicyEngineRelationship = Literal["spouse", "dependent", "other"]
+PolicyEngineEligibilityStatus = Literal["likely_eligible", "check_eligibility"]
+
+
+class PolicyEngineHouseholdMember(CamelModel):
+    """One additional person collected by the household questionnaire."""
+
+    relationship: PolicyEngineRelationship
+    age: int = Field(..., ge=0, le=120)
+    annual_employment_income: float = Field(default=0, ge=0, le=10_000_000)
+    is_disabled: bool = False
+    is_pregnant: bool = False
+
+
+class PolicyEngineEligibilityRequest(CamelModel):
+    """Questionnaire answers used for a preliminary PolicyEngine calculation."""
+
+    age: int = Field(..., ge=18, le=120)
+    income: float = Field(..., ge=0, le=10_000_000)
+    state: StateCode
+    household_size: int = Field(default=1, ge=1, le=12)
+    disability_status: bool = False
+    is_pregnant: bool = False
+    immigration_status: ImmigrationStatus = "prefer_not"
+    years_in_us: Optional[int] = Field(default=None, ge=0, le=130)
+    insurance_status: bool = False
+    current_coverage: List[str] = Field(default_factory=list, max_length=10)
+    additional_people: List[PolicyEngineHouseholdMember] = Field(
+        default_factory=list,
+        max_length=11,
+    )
+
+    @model_validator(mode="after")
+    def validate_household_members(self):
+        if len(self.additional_people) != self.household_size - 1:
+            raise ValueError("additionalPeople must describe every other household member")
+        if sum(member.relationship == "spouse" for member in self.additional_people) > 1:
+            raise ValueError("additionalPeople can include at most one spouse")
+        other_income = sum(
+            member.annual_employment_income for member in self.additional_people
+        )
+        if other_income > self.income:
+            raise ValueError("additional household-member work income exceeds total income")
+        return self
+
+
+class PolicyEngineScoredProgram(PolicyEngineCatalogProgram):
+    eligibility_status: PolicyEngineEligibilityStatus = "check_eligibility"
+    eligibility_label: str = "Check eligibility"
+    calculation_reason: str
+    calculation_year: int
+    model_calculated: bool = False
+    estimated_annual_amount: Optional[float] = None
+
+
+class PolicyEngineEligibilityResponse(CamelModel):
+    state: StateCode
+    state_name: str
+    programs: List[PolicyEngineScoredProgram] = Field(default_factory=list)
+    source_repository: str
+    source_commit: str
+    calculation_year: int
+    calculation_available: bool
+    calculation_note: str
+
+
+# ---------- CMS Marketplace plan estimates ----------
+
+CMSMarketplaceRelationship = Literal["self", "spouse", "dependent", "other"]
+
+
+class CMSMarketplacePerson(CamelModel):
+    age: int = Field(..., ge=0, le=120)
+    relationship: CMSMarketplaceRelationship
+    is_pregnant: bool = False
+    uses_tobacco: bool = False
+
+
+class CMSMarketplaceSearchRequest(CamelModel):
+    state: StateCode
+    zip_code: str = Field(..., pattern=r"^[0-9]{5}$")
+    county_fips: Optional[str] = Field(default=None, pattern=r"^[0-9]{5}$")
+    income: float = Field(..., ge=0, le=10_000_000)
+    immigration_status: ImmigrationStatus = "prefer_not"
+    current_coverage: List[str] = Field(default_factory=list, max_length=10)
+    people: List[CMSMarketplacePerson] = Field(..., min_length=1, max_length=12)
+
+    @model_validator(mode="after")
+    def validate_people(self):
+        if self.people[0].relationship != "self":
+            raise ValueError("the first Marketplace household member must be self")
+        if sum(person.relationship == "self" for person in self.people) != 1:
+            raise ValueError("Marketplace household must include exactly one self")
+        if sum(person.relationship == "spouse" for person in self.people) > 1:
+            raise ValueError("Marketplace household can include at most one spouse")
+        return self
+
+
+class CMSMarketplaceCounty(CamelModel):
+    fips: str
+    name: str
+
+
+class CMSMarketplacePlan(CamelModel):
+    id: str
+    name: str
+    issuer: str = ""
+    metal_level: str = ""
+    plan_type: str = ""
+    premium: Optional[float] = None
+    premium_with_credit: Optional[float] = None
+    monthly_savings: Optional[float] = None
+    deductible: Optional[float] = None
+    maximum_out_of_pocket: Optional[float] = None
+    cost_scope: Literal["Individual", "Family"]
+    quality_rating: Optional[int] = Field(default=None, ge=1, le=5)
+    hsa_eligible: bool = False
+    guaranteed_rate: bool = False
+    benefits_url: Optional[str] = None
+    brochure_url: Optional[str] = None
+    network_url: Optional[str] = None
+    issuer_url: Optional[str] = None
+
+
+class CMSMarketplaceSearchResponse(CamelModel):
+    available: bool = True
+    plan_estimates_available: bool = True
+    year: int
+    state: StateCode
+    state_name: str = ""
+    zip_code: str
+    county_fips: str
+    county_name: str
+    county_options: List[CMSMarketplaceCounty] = Field(default_factory=list)
+    marketplace_name: str
+    marketplace_url: str
+    marketplace_model: str = ""
+    total: int = 0
+    plans: List[CMSMarketplacePlan] = Field(default_factory=list)
+    people_assessed: int = 0
+    medicaid_chip_estimate_count: int = 0
+    source_url: str
 
 
 # ---------- Auth ----------

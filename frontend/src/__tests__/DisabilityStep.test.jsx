@@ -2,8 +2,8 @@
 /**
  * Disability step UI behaviour tests.
  *
- * These render the full Questionnaire and navigate through steps 1–2 so the
- * disability UI (step 3) becomes visible, then assert conditional rendering
+ * These render the full Questionnaire and navigate through steps 1–3 so the
+ * disability UI (step 4) becomes visible, then assert conditional rendering
  * and state-clearing behaviour.
  */
 import { vi } from 'vitest'
@@ -15,6 +15,7 @@ import Questionnaire from '../pages/Questionnaire'
 // Mock the eligibility API — tests don't need a live backend
 vi.mock('../api', () => ({
   checkEligibility: vi.fn().mockResolvedValue([]),
+  scorePolicyEngineEligibility: vi.fn().mockResolvedValue({ programs: [] }),
 }))
 
 beforeAll(() => {
@@ -24,7 +25,7 @@ beforeAll(() => {
 
 // ---- helpers ----
 
-async function advanceToStep3(user) {
+async function advanceToDisabilityStep(user) {
   // Step 1 — age + state
   await user.type(screen.getByLabelText(/your age/i), '50')
   await user.selectOptions(screen.getByLabelText(/your state/i), 'CT')
@@ -33,9 +34,12 @@ async function advanceToStep3(user) {
   // Step 2 — income (household size defaults to 1)
   await user.type(screen.getByLabelText(/annual household income/i), '18000')
   await user.click(screen.getByRole('button', { name: /continue/i }))
+
+  // Step 3 — no other household members for a one-person household
+  await user.click(screen.getByRole('button', { name: /continue/i }))
 }
 
-describe('Disability Step (Step 3)', () => {
+describe('Disability Step (Step 4)', () => {
   let user
 
   beforeEach(() => {
@@ -48,14 +52,14 @@ describe('Disability Step (Step 3)', () => {
   })
 
   it('shows the disability question on step 3', async () => {
-    await advanceToStep3(user)
+    await advanceToDisabilityStep(user)
     expect(
       screen.getByText(/do you have a disability, long-term condition, or support need/i)
     ).toBeInTheDocument()
   })
 
   it('selecting Yes reveals the follow-up section', async () => {
-    await advanceToStep3(user)
+    await advanceToDisabilityStep(user)
     // Follow-up is hidden initially
     expect(screen.queryByText(/what best describes your situation/i)).not.toBeInTheDocument()
 
@@ -65,7 +69,7 @@ describe('Disability Step (Step 3)', () => {
   })
 
   it('selecting No hides the follow-up section', async () => {
-    await advanceToStep3(user)
+    await advanceToDisabilityStep(user)
     // Reveal first, then hide
     await user.click(screen.getByRole('radio', { name: /^yes$/i }))
     expect(screen.getByText(/what best describes your situation/i)).toBeInTheDocument()
@@ -76,7 +80,7 @@ describe('Disability Step (Step 3)', () => {
   })
 
   it('checking "Another disability or support need" reveals the textarea', async () => {
-    await advanceToStep3(user)
+    await advanceToDisabilityStep(user)
     await user.click(screen.getByRole('radio', { name: /^yes$/i }))
 
     expect(screen.queryByLabelText(/describe your disability or support need/i)).not.toBeInTheDocument()
@@ -89,7 +93,7 @@ describe('Disability Step (Step 3)', () => {
   })
 
   it('switching from Yes to No clears disability detail checkboxes', async () => {
-    await advanceToStep3(user)
+    await advanceToDisabilityStep(user)
     await user.click(screen.getByRole('radio', { name: /^yes$/i }))
     await user.click(screen.getByRole('checkbox', { name: /^hearing$/i }))
     await user.click(screen.getByRole('checkbox', { name: /^vision$/i }))
@@ -107,7 +111,7 @@ describe('Disability Step (Step 3)', () => {
   })
 
   it('unchecking "Another" also hides the textarea and clears its text', async () => {
-    await advanceToStep3(user)
+    await advanceToDisabilityStep(user)
     await user.click(screen.getByRole('radio', { name: /^yes$/i }))
     await user.click(
       screen.getByRole('checkbox', { name: /another disability or support need/i })

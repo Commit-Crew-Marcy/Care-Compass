@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { validateAge, validateIncome } from '../validation.js'
+import { validateAge, validateIncome, validateOptionalZipCode } from '../validation.js'
 
 describe('validateAge', () => {
   it('accepts 18 (minimum)', () => {
@@ -64,5 +64,19 @@ describe('validateIncome', () => {
 
   it('rejects empty input', () => {
     expect(validateIncome('')).toBe('Enter your annual household income.')
+  })
+})
+
+describe('validateOptionalZipCode', () => {
+  it('allows a blank ZIP when Marketplace plans are not requested', () => {
+    expect(validateOptionalZipCode('')).toBe('')
+  })
+
+  it('accepts a five-digit ZIP code', () => {
+    expect(validateOptionalZipCode('70802')).toBe('')
+  })
+
+  it('rejects an incomplete ZIP code', () => {
+    expect(validateOptionalZipCode('7080')).toBe('Enter a 5-digit ZIP code.')
   })
 })

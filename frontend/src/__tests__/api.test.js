@@ -1,4 +1,11 @@
-import { ELIGIBILITY_REQUEST_TIMEOUT_MS, getBenefit, resolveApiBase } from '../api'
+import {
+  ELIGIBILITY_REQUEST_TIMEOUT_MS,
+  getBenefit,
+  getPolicyEnginePrograms,
+  resolveApiBase,
+  scorePolicyEngineEligibility,
+  searchCMSMarketplacePlans,
+} from '../api'
 
 describe('resolveApiBase', () => {
   it('uses the Render URL in production when VITE_API_BASE_URL is absent', () => {
@@ -105,5 +112,71 @@ describe('getBenefit', () => {
       expect.stringMatching(/\/api\/nyc-benefits\/P015en$/),
       expect.any(Object)
     )
+  })
+})
+
+describe('getPolicyEnginePrograms', () => {
+  const originalFetch = global.fetch
+
+  afterEach(() => {
+    global.fetch = originalFetch
+    vi.restoreAllMocks()
+  })
+
+  it('gets the state catalog without a calculation payload', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ state: 'AZ', programs: [] }),
+    })
+
+    await getPolicyEnginePrograms('AZ')
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringMatching(/\/api\/policyengine\/programs\/AZ$/),
+      expect.objectContaining({ headers: expect.any(Object) })
+    )
+    expect(global.fetch.mock.calls[0][1].body).toBeUndefined()
+  })
+
+  it('posts questionnaire answers to PolicyEngine scoring', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ state: 'AZ', programs: [], calculationAvailable: true }),
+    })
+    const intake = { age: 40, income: 50000, state: 'AZ', additionalPeople: [] }
+
+    await scorePolicyEngineEligibility(intake)
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringMatching(/\/api\/policyengine\/eligibility$/),
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify(intake),
+      })
+    )
+  })
+
+  it('posts Marketplace household fields only to the CareCompass backend', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ year: 2026, plans: [] }),
+    })
+    const intake = {
+      state: 'LA',
+      zipCode: '70802',
+      income: 52000,
+      people: [{ age: 32, relationship: 'self', usesTobacco: false }],
+    }
+
+    await searchCMSMarketplacePlans(intake)
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringMatching(/\/api\/cms\/marketplace\/search$/),
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify(intake),
+      })
+    )
+    expect(global.fetch.mock.calls[0][0]).not.toMatch(/apikey/i)
   })
 })

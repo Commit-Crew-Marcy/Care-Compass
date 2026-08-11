@@ -9,9 +9,10 @@ Team Commit Crew — Zoulkarnein (Project Lead), Ashar (Scrum Master), Ibrahima 
 
 ## How it works
 
-1. The user completes a 7-step questionnaire (age, income, state and NYC
+1. The user completes an 8-step questionnaire (age, income, state and NYC
    residency, household
-   size, disability/veteran status, pregnancy and children, immigration
+   size, household-member ages/relationships,
+   disability/veteran status, pregnancy and children, immigration
    status with a "prefer not to say" option, current insurance, and the kinds
    of help they want).
 2. The FastAPI backend runs the answers through a rules-based eligibility
@@ -26,19 +27,26 @@ Team Commit Crew — Zoulkarnein (Project Lead), Ashar (Scrum Master), Ibrahima 
    adds a short, category-filtered list from NYC's current Benefits and
    Programs Open Data directory. Directory records are labeled separately
    because they are suggestions, not eligibility determinations.
-4. The React frontend shows matched programs grouped by category, each
+4. In parallel, the backend runs the questionnaire household through the local
+   PolicyEngine US package and adds the federal and state programs represented
+   for the selected state. Model-supported results receive a preliminary
+   eligibility rating and estimated annual amount when available; entries that
+   need more information remain labeled “Check eligibility.” The catalog covers
+   all 50 states and DC. This integration requires no Docker service or
+   PolicyEngine API key.
+5. The React frontend shows matched programs grouped by category, each
    opening a detail page with a plain-language description, why the user may
    qualify, required documents, and the official application link.
-5. Users can create an account (register/login/logout with bcrypt-hashed
+6. Users can create an account (register/login/logout with bcrypt-hashed
    passwords and JWT tokens) and save their screenings — a user-generated
    resource with full CRUD (create, read, update/rename, delete). Updating
    a screening's answers automatically re-runs the eligibility engine.
-6. An AI assistant (floating "Ask a question" panel on results and detail
+7. An AI assistant (floating "Ask a question" panel on results and detail
    pages) explains benefits in plain language in any language via the
    Gemini API — the Python engine decides eligibility, the AI only
    explains. Requires GEMINI_API_KEY on the server; the panel degrades
    gracefully when the key is not set.
-7. The optional Chrome Browser Guide uses Gemini to explain the visible page
+8. The optional Chrome Browser Guide uses Gemini to explain the visible page
    in short, senior-friendly language and suggest one safe navigation action.
    If Gemini is unavailable, an optional Groq fallback can still provide a
    text-only answer. Page actions are validated by both the backend and
@@ -58,11 +66,15 @@ carecompass/
 │   │   ├── auth.py           POST /api/auth/{register,login,logout}, GET /api/auth/me
 │   │   ├── screenings.py     Full CRUD on saved screenings (auth required)
 │   │   ├── eligibility.py    POST /api/eligibility/check
+│   │   ├── policyengine.py   State catalog + POST /api/policyengine/eligibility
+│   │   ├── cms_marketplace.py POST /api/cms/marketplace/search
 │   │   ├── benefits.py       GET /api/benefits, GET /api/benefits/:id
 │   │   ├── nyc_benefits.py   GET /api/nyc-benefits/:id
 │   │   └── ai.py             POST /api/ai/chat (stretch)
 │   ├── services/
 │   │   ├── gemini.py         Gemini text/function-calling adapter
+│   │   ├── policyengine.py   PolicyEngine US household scoring + state catalog
+│   │   ├── cms_marketplace.py CMS county, eligibility, and plan-search adapter
 │   │   └── nyc_benefits.py   Cached NYC Open Data adapter and ranking
 │   ├── engine/
 │   │   └── rules.py          Pure-Python eligibility engine (OR-logic rules)
@@ -78,7 +90,7 @@ carecompass/
         ├── api.js            All backend calls in one place
         ├── index.css         Blue & white palette, senior-friendly sizing
         └── pages/
-            ├── Questionnaire.jsx   7-step wizard, bottom progress bar
+            ├── Questionnaire.jsx   8-step wizard, bottom progress bar
             ├── Results.jsx         Matched benefit cards + save results
             ├── BenefitDetail.jsx   Description, reasons, requirements, apply link
             ├── Login.jsx           Log in
@@ -88,18 +100,27 @@ carecompass/
 
 ## Setup — backend (terminal 1)
 
-Requires Python 3.10+.
+Requires Python 3.12+ (PolicyEngine's compiled dependencies are tested with the
+same Python version used by the deployed backend).
 
 ```bash
 cd backend
-python -m venv venv
-source venv/bin/activate        # Windows: venv\Scripts\activate
+python3.12 -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 python -m db.seed               # creates carecompass.db and seeds 4 programs
 uvicorn main:app --reload       # API at http://localhost:8000
 ```
 
 Interactive API docs (great for demos): http://localhost:8000/docs
+
+PolicyEngine runs in the backend process, so there is no third service to start.
+With the backend running, inspect any state directly:
+
+```bash
+curl http://localhost:8000/api/policyengine/programs/AZ
+curl http://localhost:8000/api/policyengine/programs/NY
+```
 
 ## Setup — frontend (terminal 2)
 
@@ -119,6 +140,15 @@ deployed app, you can create a free Socrata app token and set
 `NYC_OPEN_DATA_APP_TOKEN` to receive higher request limits. CareCompass caches
 the directory for one hour and keeps the existing rule-based results working
 if NYC Open Data is temporarily unavailable.
+
+Current Marketplace plan estimates require `CMS_MARKETPLACE_API_KEY` in
+`backend/.env`. The key stays server-side. Entering an optional ZIP code and
+selecting Health and insurance (or all help) in the questionnaire returns up
+to five of the lowest-premium current plans from CMS. If CMS is unavailable,
+the rest of the screening still completes normally. For states that operate
+their own Marketplace, such as Illinois and New York, CMS does not expose
+plan-level prices; CareCompass shows the official state Marketplace and links
+to its current plan-search experience instead of reporting an API failure.
 
 ## Switching to PostgreSQL (for the final)
 
@@ -161,7 +191,8 @@ curl -X POST http://localhost:8000/api/eligibility/check \
    Start Command `uvicorn main:app --host 0.0.0.0 --port $PORT`
 4. Add environment variable `SECRET_KEY` set to any long random string. Add
    `GEMINI_API_KEY` to enable the website assistant and Browser Guide, plus
-   `GROQ_API_KEY` to enable the Browser Guide's fallback.
+   `GROQ_API_KEY` to enable the Browser Guide's fallback. Add
+   `CMS_MARKETPLACE_API_KEY` to enable current Marketplace plan estimates.
 5. Deploy, then open the Render shell and run `python -m db.seed` once
 6. Copy your Render URL (e.g. https://carecompass-api.onrender.com)
 

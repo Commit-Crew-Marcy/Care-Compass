@@ -24,3 +24,8 @@ export function validateIncome(val) {
   if (n > INCOME_MAX) return 'Enter an income of $10,000,000 or less.'
   return ''
 }
+
+export function validateOptionalZipCode(val) {
+  if (val === '') return ''
+  return /^[0-9]{5}$/.test(String(val)) ? '' : 'Enter a 5-digit ZIP code.'
+}

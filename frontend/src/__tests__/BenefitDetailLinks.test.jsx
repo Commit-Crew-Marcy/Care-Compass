@@ -19,9 +19,9 @@ const BASE_BENEFIT = {
   governmentAgency: 'NYC Department of Education (DOE)',
 }
 
-function renderDetail() {
+function renderDetail(initialEntry = '/benefits/nyc-P020en') {
   return render(
-    <MemoryRouter initialEntries={['/benefits/nyc-P020en']}>
+    <MemoryRouter initialEntries={[initialEntry]}>
       <Routes>
         <Route path="/benefits/:id" element={<BenefitDetail />} />
       </Routes>
@@ -31,6 +31,129 @@ function renderDetail() {
 
 beforeEach(() => {
   vi.mocked(getBenefit).mockReset()
+  localStorage.clear()
+})
+
+it('shows a PolicyEngine catalog entry inside CareCompass before opening the official site', async () => {
+  const policyBenefit = {
+    id: 'policyengine-az-snap',
+    name: 'SNAP (Food Assistance)',
+    description: 'Monthly help purchasing groceries under federal and state SNAP rules.',
+    eligibilitySummary: 'PolicyEngine US models this nationwide program for households in Arizona.',
+    matchReason: 'Included because snap is present in the PolicyEngine US model.',
+    programType: 'snap',
+    source: 'policyengine',
+    scope: 'federal',
+    eligibilityStatus: 'check_eligibility',
+    eligibilityLabel: 'Check eligibility',
+    calculationReason: 'More household information is needed before estimating this program.',
+    calculationYear: 2026,
+    modelCalculated: true,
+    modelVariable: 'snap',
+    applyUrl: 'https://www.fns.usda.gov/snap/state-directory',
+  }
+
+  renderDetail({
+    pathname: `/benefits/${policyBenefit.id}`,
+    state: { benefit: policyBenefit, matchReason: policyBenefit.matchReason },
+  })
+
+  expect(await screen.findByRole('heading', { name: /snap \(food assistance\)/i })).toBeInTheDocument()
+  expect(screen.getByText(/^Check eligibility$/i)).toBeInTheDocument()
+  expect(screen.queryByText(/PolicyEngine US · Modeled program/i)).not.toBeInTheDocument()
+  expect(screen.getByText(/before you apply/i)).toBeInTheDocument()
+  expect(screen.getByRole('link', { name: /view official program information/i })).toHaveAttribute(
+    'href',
+    policyBenefit.applyUrl
+  )
+  expect(screen.getByRole('link', { name: /^PolicyEngine US model$/i })).toHaveAttribute(
+    'href',
+    'https://github.com/PolicyEngine/policyengine-us'
+  )
+  expect(screen.queryByText(/snap is present/i)).not.toBeInTheDocument()
+  expect(screen.queryByText(/model variable/i)).not.toBeInTheDocument()
+  expect(screen.queryByText(/variable: snap/i)).not.toBeInTheDocument()
+  expect(getBenefit).not.toHaveBeenCalled()
+})
+
+it('shows CMS plan pricing inside CareCompass before the official Marketplace', async () => {
+  const cmsPlan = {
+    id: 'cms-marketplace-2026-19636LA0230012',
+    externalId: '19636LA0230012',
+    name: 'Community Blue Bronze',
+    description: 'Bronze POS health plan from HMO Louisiana.',
+    eligibilitySummary: 'Estimated monthly premium: $480.61.',
+    matchReason: 'CMS returned this plan for East Baton Rouge County.',
+    programType: 'marketplace_plan',
+    source: 'cms_marketplace',
+    cmsMarketplace: true,
+    cmsMarketplaceYear: 2026,
+    countyName: 'East Baton Rouge County',
+    applyUrl: 'https://www.healthcare.gov/see-plans/',
+    issuer: 'HMO Louisiana',
+    metalLevel: 'Bronze',
+    planType: 'POS',
+    premium: 900.61,
+    premiumWithCredit: 480.61,
+    monthlySavings: 420,
+    deductible: 12000,
+    maximumOutOfPocket: 18000,
+    costScope: 'Family',
+    qualityRating: 3,
+    benefitsUrl: 'https://issuer.example/sbc.pdf',
+  }
+
+  renderDetail({
+    pathname: `/benefits/${cmsPlan.id}`,
+    state: { benefit: cmsPlan, matchReason: cmsPlan.matchReason },
+  })
+
+  expect(await screen.findByRole('heading', { name: /community blue bronze/i })).toBeInTheDocument()
+  expect(screen.getByText(/CMS Marketplace · Plan estimate/i)).toBeInTheDocument()
+  expect(screen.getByText('$480.61')).toBeInTheDocument()
+  expect(screen.getByText('$12,000')).toBeInTheDocument()
+  expect(screen.getByText(/3 of 5/i)).toBeInTheDocument()
+  expect(screen.getByRole('link', { name: /compare or enroll on the official marketplace/i })).toHaveAttribute(
+    'href',
+    cmsPlan.applyUrl
+  )
+  expect(screen.getByRole('link', { name: /summary of benefits and coverage/i })).toHaveAttribute(
+    'href',
+    cmsPlan.benefitsUrl
+  )
+  expect(getBenefit).not.toHaveBeenCalled()
+})
+
+it('opens a state-run Marketplace explanation before the official state site', async () => {
+  const stateMarketplace = {
+    id: 'cms-marketplace-2026-il-state',
+    name: 'Get Covered Illinois',
+    description: 'The official state-run health insurance Marketplace serving IL.',
+    matchReason: 'CMS identifies Get Covered Illinois as the official state-run Marketplace for IL.',
+    programType: 'marketplace_directory',
+    source: 'cms_marketplace_directory',
+    cmsMarketplace: true,
+    cmsMarketplaceDirectory: true,
+    cmsMarketplaceName: 'Get Covered Illinois',
+    cmsMarketplaceYear: 2026,
+    cmsMarketplaceSourceUrl: 'https://developer.cms.gov/marketplace-api/',
+    applyUrl: 'https://getcoveredillinois.gov/',
+  }
+
+  renderDetail({
+    pathname: `/benefits/${stateMarketplace.id}`,
+    state: { benefit: stateMarketplace, matchReason: stateMarketplace.matchReason },
+  })
+
+  expect(await screen.findByRole('heading', { name: /get covered illinois/i })).toBeInTheDocument()
+  expect(screen.getByText(/official state Marketplace/i)).toBeInTheDocument()
+  expect(screen.getByText(/before you compare plans/i)).toBeInTheDocument()
+  expect(screen.queryByText(/plan estimate/i)).not.toBeInTheDocument()
+  expect(screen.getByRole('link', { name: /view plans on get covered illinois/i })).toHaveAttribute(
+    'href',
+    stateMarketplace.applyUrl
+  )
+  expect(getBenefit).not.toHaveBeenCalled()
 })
 
 it('shows a program-information button and a human-readable directory source', async () => {

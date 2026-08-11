@@ -12,18 +12,21 @@ import Questionnaire from '../pages/Questionnaire'
 
 vi.mock('../api', () => ({
   checkEligibility: vi.fn().mockResolvedValue([]),
+  scorePolicyEngineEligibility: vi.fn().mockResolvedValue({ programs: [] }),
 }))
 
-async function advanceToStep3(user) {
+async function advanceToFamilyStep(user) {
   await user.type(screen.getByLabelText(/your age/i), '30')
   await user.selectOptions(screen.getByLabelText(/your state/i), 'CT')
   await user.click(screen.getByRole('button', { name: /continue/i }))
 
   await user.type(screen.getByLabelText(/annual household income/i), '18000')
   await user.click(screen.getByRole('button', { name: /continue/i }))
+
+  await user.click(screen.getByRole('button', { name: /continue/i }))
 }
 
-describe('Child under 5 follow-up (Step 3)', () => {
+describe('Child under 5 follow-up (Step 4)', () => {
   let user
 
   beforeEach(async () => {
@@ -33,7 +36,7 @@ describe('Child under 5 follow-up (Step 3)', () => {
         <Questionnaire />
       </MemoryRouter>
     )
-    await advanceToStep3(user)
+    await advanceToFamilyStep(user)
     await user.click(screen.getByRole('radio', { name: /^no$/i })) // disability: No
   })
 

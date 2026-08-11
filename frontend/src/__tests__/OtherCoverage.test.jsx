@@ -12,6 +12,7 @@ import Questionnaire from '../pages/Questionnaire'
 
 vi.mock('../api', () => ({
   checkEligibility: vi.fn().mockResolvedValue([]),
+  scorePolicyEngineEligibility: vi.fn().mockResolvedValue({ programs: [] }),
 }))
 
 beforeAll(() => {
@@ -19,7 +20,7 @@ beforeAll(() => {
   Element.prototype.scrollIntoView = vi.fn()
 })
 
-async function advanceToStep5(user) {
+async function advanceToInsuranceStep(user) {
   await user.type(screen.getByLabelText(/your age/i), '45')
   await user.selectOptions(screen.getByLabelText(/your state/i), 'CT')
   await user.click(screen.getByRole('button', { name: /continue/i }))
@@ -27,13 +28,15 @@ async function advanceToStep5(user) {
   await user.type(screen.getByLabelText(/annual household income/i), '18000')
   await user.click(screen.getByRole('button', { name: /continue/i }))
 
+  await user.click(screen.getByRole('button', { name: /continue/i })) // household members: none
+
   await user.click(screen.getByRole('radio', { name: /^no$/i })) // disability: No
   await user.click(screen.getByRole('button', { name: /continue/i }))
 
   await user.click(screen.getByRole('button', { name: /continue/i })) // immigration: default
 }
 
-describe('Other health coverage description (Step 5)', () => {
+describe('Other health coverage description (Step 6)', () => {
   let user
 
   beforeEach(async () => {
@@ -43,7 +46,7 @@ describe('Other health coverage description (Step 5)', () => {
         <Questionnaire />
       </MemoryRouter>
     )
-    await advanceToStep5(user)
+    await advanceToInsuranceStep(user)
   })
 
   it('does not show the description just because Yes is selected', async () => {

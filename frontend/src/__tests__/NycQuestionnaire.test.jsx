@@ -5,7 +5,10 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import Questionnaire from '../pages/Questionnaire'
 
-vi.mock('../api', () => ({ checkEligibility: vi.fn().mockResolvedValue([]) }))
+vi.mock('../api', () => ({
+  checkEligibility: vi.fn().mockResolvedValue([]),
+  scorePolicyEngineEligibility: vi.fn().mockResolvedValue({ programs: [] }),
+}))
 
 beforeEach(() => {
   render(

@@ -11,8 +11,14 @@ import { MemoryRouter } from 'react-router-dom'
 import Questionnaire from '../pages/Questionnaire'
 
 const checkEligibility = vi.fn().mockResolvedValue([])
+const scorePolicyEngineEligibility = vi.fn().mockResolvedValue({
+  state: 'CT',
+  stateName: 'Connecticut',
+  programs: [],
+})
 vi.mock('../api', () => ({
   checkEligibility: (...args) => checkEligibility(...args),
+  scorePolicyEngineEligibility: (...args) => scorePolicyEngineEligibility(...args),
 }))
 
 beforeAll(() => {
@@ -36,7 +42,10 @@ async function fillThroughStep5AndReachReview(user, { withDescriptions } = {}) {
   await user.type(screen.getByLabelText(/annual household income/i), '68888')
   await user.click(screen.getByRole('button', { name: /continue/i }))
 
-  // Step 3 — disability
+  // Step 3 — no other household members
+  await user.click(screen.getByRole('button', { name: /continue/i }))
+
+  // Step 4 — disability
   if (withDescriptions) {
     await user.click(screen.getByRole('radio', { name: /^yes$/i }))
     await user.click(screen.getByRole('checkbox', { name: /another disability or support need/i }))
@@ -49,10 +58,10 @@ async function fillThroughStep5AndReachReview(user, { withDescriptions } = {}) {
   }
   await user.click(screen.getByRole('button', { name: /continue/i }))
 
-  // Step 4 — immigration (leave default "prefer not to say")
+  // Step 5 — immigration (leave default "prefer not to say")
   await user.click(screen.getByRole('button', { name: /continue/i }))
 
-  // Step 5 — insurance
+  // Step 6 — insurance
   if (withDescriptions) {
     await user.click(screen.getByRole('radio', { name: /yes, i have insurance/i }))
     await user.click(screen.getByRole('checkbox', { name: /other coverage/i }))
@@ -65,7 +74,7 @@ async function fillThroughStep5AndReachReview(user, { withDescriptions } = {}) {
   }
   await user.click(screen.getByRole('button', { name: /continue/i }))
 
-  // Step 6 — types of help
+  // Step 7 — types of help
   await user.click(screen.getByRole('checkbox', { name: /health and insurance/i }))
   await user.click(screen.getByRole('button', { name: /continue/i }))
 }
@@ -75,6 +84,11 @@ describe('Questionnaire submit payload', () => {
 
   beforeEach(() => {
     checkEligibility.mockReset().mockResolvedValue([])
+    scorePolicyEngineEligibility.mockReset().mockResolvedValue({
+      state: 'CT',
+      stateName: 'Connecticut',
+      programs: [],
+    })
     user = userEvent.setup()
     render(
       <MemoryRouter>
@@ -107,6 +121,19 @@ describe('Questionnaire submit payload', () => {
     // "other" is a frontend-only bucket for the description — the rules
     // engine doesn't recognize it, so it must never reach the API.
     expect(payload.currentCoverage).toEqual([])
+    expect(scorePolicyEngineEligibility).toHaveBeenCalledWith({
+      age: payload.age,
+      income: payload.income,
+      state: payload.state,
+      householdSize: payload.householdSize,
+      disabilityStatus: true,
+      isPregnant: false,
+      immigrationStatus: payload.immigrationStatus,
+      yearsInUs: payload.yearsInUs,
+      insuranceStatus: payload.insuranceStatus,
+      currentCoverage: payload.currentCoverage,
+      additionalPeople: [],
+    })
   })
 
   it('sends currentCoverage as [] when insuranceStatus is false', async () => {

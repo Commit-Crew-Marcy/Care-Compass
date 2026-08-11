@@ -21,7 +21,7 @@ const GROUPS = [
   },
   {
     title: 'Health coverage',
-    types: ['medicaid', 'emergency_medicaid', 'chip', 'marketplace', 'health'],
+    types: ['medicaid', 'emergency_medicaid', 'chip', 'marketplace', 'marketplace_plan', 'marketplace_directory', 'health'],
   },
   {
     title: 'Food and family support',
@@ -29,7 +29,7 @@ const GROUPS = [
   },
   {
     title: 'Money and utility help',
-    types: ['ssi', 'liheap', 'cash', 'housing', 'city_id'],
+    types: ['ssi', 'liheap', 'cash', 'housing', 'city_id', 'eitc', 'ctc', 'state_tax_credit'],
   },
   {
     title: 'Work, education, and activities',
@@ -40,7 +40,9 @@ const GROUPS = [
 function groupResults(results) {
   const used = new Set()
   const grouped = GROUPS.map((g) => {
-    const items = results.filter((b) => g.types.includes(b.programType))
+    const items = results
+      .filter((b) => g.types.includes(b.programType))
+      .sort((a, b) => resultPriority(a) - resultPriority(b))
     items.forEach((b) => used.add(b.id))
     return { title: g.title, items }
   }).filter((g) => g.items.length > 0)
@@ -48,6 +50,70 @@ function groupResults(results) {
   const rest = results.filter((b) => !used.has(b.id))
   if (rest.length > 0) grouped.push({ title: 'Other programs', items: rest })
   return grouped
+}
+
+function resultPriority(benefit) {
+  if (isPreliminaryPositive(benefit)) return 0
+  if (benefit.source === 'cms_marketplace' || benefit.source === 'cms_marketplace_directory') return 1
+  return 2
+}
+
+function isPreliminaryPositive(benefit) {
+  if (benefit.source === 'nyc_open_data' || benefit.source === 'cms_marketplace_directory') return false
+  if (benefit.source === 'policyengine') {
+    return benefit.eligibilityStatus === 'likely_eligible'
+  }
+  return true
+}
+
+function detailMatchReason(benefit) {
+  if (benefit.source === 'cms_marketplace_directory') return benefit.matchReason
+  if (benefit.policyEngineCatalog) {
+    return benefit.policyEngineCalculationReason
+      || benefit.calculationReason
+      || 'We showed this because PolicyEngine US includes it in the program catalog for your selected state. Review the official requirements to find out whether your household may qualify.'
+  }
+  return benefit.matchReason
+}
+
+function ResultCardContent({ benefit }) {
+  const amount = benefit.estimatedAnnualAmount
+  const summary = ['policyengine', 'cms_marketplace', 'cms_marketplace_directory'].includes(benefit.source)
+    ? benefit.description
+    : benefit.eligibilitySummary
+  return (
+    <>
+      {benefit.source === 'nyc_open_data'
+        ? <span className="badge badge--estimate">NYC resource · Check eligibility</span>
+        : benefit.source === 'cms_marketplace_directory'
+          ? <span className="badge badge--estimate">Official state Marketplace</span>
+        : benefit.source === 'cms_marketplace'
+          ? <span className="badge badge--estimate">CMS Marketplace · Plan estimate</span>
+        : benefit.source === 'policyengine'
+          ? benefit.eligibilityStatus === 'likely_eligible'
+            ? <span className="badge">✓ Likely eligible · Estimate</span>
+            : <span className="badge badge--estimate">Check eligibility</span>
+          : benefit.policyEngineEligibilityStatus === 'likely_eligible'
+            ? <span className="badge">✓ Likely eligible · Estimate</span>
+            : <span className="badge">✓ Likely eligible</span>}
+      <h2>{benefit.name}</h2>
+      <p>{summary}</p>
+      {amount != null && (
+        <p className="policyengine-amount">
+          Estimated for the year: <strong>${Number(amount).toLocaleString(undefined, { maximumFractionDigits: 2 })}</strong>
+        </p>
+      )}
+      {benefit.source === 'cms_marketplace' && (benefit.premiumWithCredit ?? benefit.premium) != null && (
+        <p className="policyengine-amount">
+          Estimated monthly premium:{' '}
+          <strong>
+            ${Number(benefit.premiumWithCredit ?? benefit.premium).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+          </strong>
+          {benefit.monthlySavings > 0 ? ` after an estimated $${Number(benefit.monthlySavings).toLocaleString(undefined, { maximumFractionDigits: 2 })} tax credit` : ''}
+        </p>
+      )}
+    </>
+  )
 }
 
 export default function Results() {
@@ -60,6 +126,7 @@ export default function Results() {
   const [cached] = useState(() => (hasStateResults ? null : loadLatestScreening()))
   const results = hasStateResults ? state.results : cached?.results
   const intake = hasStateResults ? state.intake : cached?.intake
+  const metadata = hasStateResults ? (state.metadata || {}) : (cached?.metadata || {})
   const [saveName, setSaveName] = useState('My screening')
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
@@ -68,7 +135,7 @@ export default function Results() {
   // Arriving fresh from the questionnaire (state present) refreshes the
   // cache so it reflects the newest screening.
   useEffect(() => {
-    if (hasStateResults) saveLatestScreening(state.results, state.intake)
+    if (hasStateResults) saveLatestScreening(state.results, state.intake, state.metadata || {})
   }, [hasStateResults, state])
 
   const startNewQuestionnaire = () => {
@@ -78,6 +145,12 @@ export default function Results() {
 
   const grouped = useMemo(() => (results ? groupResults(results) : []), [results])
   const nycResultCount = results?.filter((benefit) => benefit.source === 'nyc_open_data').length || 0
+  const policyEngineResultCount = results?.filter((benefit) => benefit.policyEngineCatalog).length || 0
+  const policyEngineLikelyCount = results?.filter((benefit) => (
+    benefit.policyEngineEligibilityStatus === 'likely_eligible'
+    || (benefit.source === 'policyengine' && benefit.eligibilityStatus === 'likely_eligible')
+  )).length || 0
+  const cmsMarketplacePlanCount = results?.filter((benefit) => benefit.source === 'cms_marketplace').length || 0
 
   // Safe page-context summary for the AI Guide — only names and short,
   // already-public descriptions, never raw intake answers.
@@ -91,7 +164,9 @@ export default function Results() {
         ? [{ id: 'start-new-questionnaire-button', type: 'button', label: 'Start a new questionnaire' }]
         : [{ id: 'start-questionnaire-button', type: 'button', label: 'Start the questionnaire' }],
       visibleLinks: results
-        ? results.slice(0, 10).map((b) => ({ id: `benefit-link-${b.id}`, label: b.name, route: `/benefits/${b.id}` }))
+        ? results
+            .slice(0, 10)
+            .map((b) => ({ id: `benefit-link-${b.id}`, label: b.name, route: `/benefits/${b.id}` }))
         : [],
       matchedBenefits: results
         ? results.slice(0, 10).map((b) => ({ name: b.name, description: b.eligibilitySummary }))
@@ -127,13 +202,67 @@ export default function Results() {
     <main className="container">
       <h1>Your possible benefits and resources</h1>
       <p className="subtitle">
-        {results.length} possible match{results.length === 1 ? '' : 'es'} found based on your answers
+        {results.length} program{results.length === 1 ? '' : 's'} and resource{results.length === 1 ? '' : 's'} shown for your state
       </p>
 
       {nycResultCount > 0 && (
         <div className="source-notice">
           <strong>{nycResultCount} current New York City resource{nycResultCount === 1 ? '' : 's'} included.</strong>{' '}
           These come from the NYC Benefits and Programs directory. They may be relevant, but their official requirements still need to be checked.
+        </div>
+      )}
+
+      {metadata.cmsMarketplaceRequested
+        && !metadata.cmsMarketplaceUnavailable
+        && metadata.cmsMarketplacePlanEstimatesAvailable === false && (
+        <div className="source-notice" role="status">
+          <strong>{metadata.cmsMarketplaceName} handles Marketplace plans for {metadata.cmsMarketplaceState}.</strong>{' '}
+          CMS does not provide plan-level estimates for this state-run Marketplace.{' '}
+          {metadata.cmsMarketplaceUrl && (
+            <a href={metadata.cmsMarketplaceUrl} target="_blank" rel="noreferrer">
+              Review current plans on the official site ↗
+            </a>
+          )}
+        </div>
+      )}
+
+      {metadata.cmsMarketplaceRequested
+        && !metadata.cmsMarketplaceUnavailable
+        && metadata.cmsMarketplacePlanEstimatesAvailable !== false
+        && cmsMarketplacePlanCount > 0 && (
+        <div className="source-notice">
+          <strong>
+            CMS Marketplace found {metadata.cmsMarketplaceTotal || cmsMarketplacePlanCount} current plan{(metadata.cmsMarketplaceTotal || cmsMarketplacePlanCount) === 1 ? '' : 's'} for {metadata.cmsMarketplaceCountyName}.
+          </strong>{' '}
+          Showing {cmsMarketplacePlanCount} of the lowest estimated monthly premiums for {metadata.cmsMarketplaceYear}.
+        </div>
+      )}
+
+      {metadata.policyEngineCatalogUnavailable && (
+        <div className="source-notice source-notice--warning" role="status">
+          <strong>The PolicyEngine US estimate could not be loaded.</strong>{' '}
+          The CareCompass and city-program matches below are still available.
+        </div>
+      )}
+
+      {!metadata.policyEngineCatalogUnavailable
+        && metadata.policyEngineCalculationAvailable === false
+        && policyEngineResultCount > 0 && (
+        <div className="source-notice source-notice--warning" role="status">
+          <strong>PolicyEngine eligibility scoring is temporarily unavailable.</strong>{' '}
+          Its modeled programs are still marked Check eligibility so you can review their official requirements.
+        </div>
+      )}
+
+      {!metadata.policyEngineCatalogUnavailable
+        && metadata.policyEngineCalculationAvailable !== false
+        && policyEngineResultCount > 0 && (
+        <div className="source-notice">
+          <strong>PolicyEngine checked {metadata.policyEngineCatalogCount || policyEngineResultCount} modeled programs for {metadata.policyEngineCatalogStateName || metadata.policyEngineCatalogState}.</strong>{' '}
+          {policyEngineLikelyCount > 0
+            ? `${policyEngineLikelyCount} returned ${policyEngineLikelyCount === 1 ? 'a positive preliminary estimate' : 'positive preliminary estimates'}. `
+            : ''}
+          Cards marked Check eligibility need more information or an official review.
         </div>
       )}
 
@@ -188,23 +317,23 @@ export default function Results() {
             <Link
               id={`benefit-link-${b.id}`}
               to={`/benefits/${b.id}`}
-              state={{ matchReason: b.matchReason }}
+              state={{
+                matchReason: detailMatchReason(b),
+                policyEngineCatalog: Boolean(b.policyEngineCatalog),
+                ...((b.policyEngineCatalog || b.cmsMarketplace) ? { benefit: b } : {}),
+              }}
               className="card"
               key={b.id}
             >
-              {b.source === 'nyc_open_data'
-                ? <span className="badge badge--estimate">NYC resource · Check eligibility</span>
-                : <span className="badge">✓ Likely eligible</span>}
-              <h2>{b.name}</h2>
-              <p>{b.eligibilitySummary}</p>
+              <ResultCardContent benefit={b} />
             </Link>
           ))}
         </section>
       ))}
 
       <p className="disclaimer">
-        These results are estimates based on the information you provided, not an
-        official determination. Contact each program's agency to confirm your eligibility.
+        CareCompass, PolicyEngine, and CMS results are estimates, not official determinations.
+        Contact each program's agency to confirm availability, amounts, and eligibility.
       </p>
     </main>
   )

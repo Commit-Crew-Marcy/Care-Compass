@@ -14,10 +14,15 @@ from dotenv import load_dotenv
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
+# CMS authenticates with a query parameter. httpx's INFO request log includes
+# the full query string, so keep transport logging above INFO to prevent API
+# keys from appearing in local or deployed backend logs.
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 from db.database import Base, engine
 from db.seed import seed
-from routers import ai, auth, benefits, eligibility, nyc_benefits, screenings
+from routers import ai, auth, benefits, cms_marketplace, eligibility, nyc_benefits, policyengine, screenings
 
 Base.metadata.create_all(bind=engine)
 seed()
@@ -44,6 +49,8 @@ app.include_router(eligibility.router)
 app.include_router(screenings.router)
 app.include_router(benefits.router)
 app.include_router(nyc_benefits.router)
+app.include_router(policyengine.router)
+app.include_router(cms_marketplace.router)
 app.include_router(ai.router)
 
 

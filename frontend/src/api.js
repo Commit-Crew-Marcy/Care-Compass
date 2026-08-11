@@ -12,6 +12,8 @@ export function resolveApiBase(envUrl, isDev) {
 
 const BASE = resolveApiBase(import.meta.env.VITE_API_BASE_URL, import.meta.env.DEV)
 export const ELIGIBILITY_REQUEST_TIMEOUT_MS = 45_000
+export const POLICYENGINE_REQUEST_TIMEOUT_MS = 60_000
+export const CMS_MARKETPLACE_REQUEST_TIMEOUT_MS = 45_000
 
 // Structured error thrown by every failed request. UI code can branch on
 // `status` / `isNetworkError` instead of parsing a message string.
@@ -126,6 +128,42 @@ export async function checkEligibility(intake) {
   }
 }
 
+// The state catalog remains useful for direct inspection and fallback.
+export const getPolicyEnginePrograms = (state) =>
+  request(`/api/policyengine/programs/${encodeURIComponent(state)}`)
+
+// Runs PolicyEngine in the CareCompass backend process using questionnaire
+// answers. No PolicyEngine credentials or browser-side secrets are involved.
+export async function scorePolicyEngineEligibility(intake) {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), POLICYENGINE_REQUEST_TIMEOUT_MS)
+  try {
+    return await request('/api/policyengine/eligibility', {
+      method: 'POST',
+      body: intake,
+      signal: controller.signal,
+    })
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+// The CMS key stays in the backend. This request contains only the minimum
+// household and location fields needed for current Marketplace plan estimates.
+export async function searchCMSMarketplacePlans(intake) {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), CMS_MARKETPLACE_REQUEST_TIMEOUT_MS)
+  try {
+    return await request('/api/cms/marketplace/search', {
+      method: 'POST',
+      body: intake,
+      signal: controller.signal,
+    })
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
 // Fire-and-forget ping to wake a sleeping Render free-tier instance early.
 // Call once when the app loads so the ~30-60s cold start overlaps with the
 // user reading the page and filling out the questionnaire, instead of
@@ -133,6 +171,7 @@ export async function checkEligibility(intake) {
 // are ignored — this is best-effort, not something the UI should surface.
 export function warmUpServer() {
   fetch(`${BASE}/`).catch(() => {})
+  fetch(`${BASE}/api/policyengine/warmup`, { method: 'POST' }).catch(() => {})
 }
 
 export const getBenefit = (id) => {
