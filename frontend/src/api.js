@@ -12,8 +12,12 @@ export function resolveApiBase(envUrl, isDev) {
 
 const BASE = resolveApiBase(import.meta.env.VITE_API_BASE_URL, import.meta.env.DEV)
 export const ELIGIBILITY_REQUEST_TIMEOUT_MS = 45_000
-export const POLICYENGINE_REQUEST_TIMEOUT_MS = 60_000
-export const CMS_MARKETPLACE_REQUEST_TIMEOUT_MS = 45_000
+// PolicyEngine scoring and CMS plan prices enrich the core CareCompass
+// results, but neither is allowed to hold the results page for close to a
+// minute. Both normally finish locally in under two seconds; six seconds also
+// leaves room for a first PolicyEngine model load.
+export const POLICYENGINE_REQUEST_TIMEOUT_MS = 6_000
+export const CMS_MARKETPLACE_REQUEST_TIMEOUT_MS = 6_000
 
 // Structured error thrown by every failed request. UI code can branch on
 // `status` / `isNetworkError` instead of parsing a message string.
@@ -129,22 +133,54 @@ export async function checkEligibility(intake) {
 }
 
 // The state catalog remains useful for direct inspection and fallback.
-export const getPolicyEnginePrograms = (state) =>
-  request(`/api/policyengine/programs/${encodeURIComponent(state)}`)
+export const getPolicyEnginePrograms = (state, { signal } = {}) =>
+  request(`/api/policyengine/programs/${encodeURIComponent(state)}`, { signal })
 
 // Runs PolicyEngine in the CareCompass backend process using questionnaire
 // answers. No PolicyEngine credentials or browser-side secrets are involved.
 export async function scorePolicyEngineEligibility(intake) {
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), POLICYENGINE_REQUEST_TIMEOUT_MS)
+  const scoreController = new AbortController()
+  const catalogController = new AbortController()
+  const timeout = setTimeout(() => {
+    scoreController.abort()
+    catalogController.abort()
+  }, POLICYENGINE_REQUEST_TIMEOUT_MS)
+
+  // Start the deterministic state catalog beside the heavier calculation.
+  // If scoring fails or times out, this keeps the modeled programs available
+  // with a conservative Check eligibility rating instead of dropping the
+  // entire PolicyEngine section.
+  const catalogFallback = getPolicyEnginePrograms(intake.state, {
+    signal: catalogController.signal,
+  }).then(
+    (value) => ({ status: 'fulfilled', value }),
+    (reason) => ({ status: 'rejected', reason }),
+  )
+
   try {
     return await request('/api/policyengine/eligibility', {
       method: 'POST',
       body: intake,
-      signal: controller.signal,
+      signal: scoreController.signal,
     })
+  } catch (scoreError) {
+    const fallback = await catalogFallback
+    if (fallback.status === 'fulfilled') {
+      return {
+        ...fallback.value,
+        calculationAvailable: false,
+        calculationYear: null,
+        calculationNote: (
+          'The household estimate did not finish, so the modeled state programs '
+          + 'are shown with Check eligibility ratings.'
+        ),
+      }
+    }
+    throw scoreError
   } finally {
     clearTimeout(timeout)
+    scoreController.abort()
+    catalogController.abort()
   }
 }
 

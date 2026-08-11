@@ -1,5 +1,7 @@
 import {
+  CMS_MARKETPLACE_REQUEST_TIMEOUT_MS,
   ELIGIBILITY_REQUEST_TIMEOUT_MS,
+  POLICYENGINE_REQUEST_TIMEOUT_MS,
   getBenefit,
   getPolicyEnginePrograms,
   resolveApiBase,
@@ -154,6 +156,78 @@ describe('getPolicyEnginePrograms', () => {
         body: JSON.stringify(intake),
       })
     )
+  })
+
+  it('uses the state catalog when the PolicyEngine household estimate fails', async () => {
+    global.fetch = vi.fn().mockImplementation((url) => {
+      if (url.includes('/api/policyengine/programs/AZ')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            state: 'AZ',
+            stateName: 'Arizona',
+            programs: [{ id: 'policyengine-az-snap', name: 'SNAP' }],
+          }),
+        })
+      }
+      return Promise.resolve({
+        ok: false,
+        status: 503,
+        json: async () => ({ detail: 'Estimate unavailable' }),
+      })
+    })
+
+    const result = await scorePolicyEngineEligibility({
+      age: 40,
+      income: 50000,
+      state: 'AZ',
+      additionalPeople: [],
+    })
+
+    expect(result).toMatchObject({
+      state: 'AZ',
+      calculationAvailable: false,
+      programs: [{ id: 'policyengine-az-snap', name: 'SNAP' }],
+    })
+    expect(result.calculationNote).toMatch(/estimate did not finish/i)
+  })
+
+  it('returns the state catalog when PolicyEngine scoring exceeds its deadline', async () => {
+    vi.useFakeTimers()
+    global.fetch = vi.fn().mockImplementation((url, { signal }) => {
+      if (url.includes('/api/policyengine/programs/AZ')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            state: 'AZ',
+            stateName: 'Arizona',
+            programs: [{ id: 'policyengine-az-snap', name: 'SNAP' }],
+          }),
+        })
+      }
+      return new Promise((_resolve, reject) => {
+        signal.addEventListener('abort', () => {
+          reject(Object.assign(new Error('Aborted'), { name: 'AbortError' }))
+        })
+      })
+    })
+
+    try {
+      const pending = scorePolicyEngineEligibility({ state: 'AZ' })
+      await vi.advanceTimersByTimeAsync(POLICYENGINE_REQUEST_TIMEOUT_MS)
+      await expect(pending).resolves.toMatchObject({
+        state: 'AZ',
+        calculationAvailable: false,
+        programs: [{ id: 'policyengine-az-snap', name: 'SNAP' }],
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('bounds optional questionnaire integrations to six seconds', () => {
+    expect(POLICYENGINE_REQUEST_TIMEOUT_MS).toBe(6_000)
+    expect(CMS_MARKETPLACE_REQUEST_TIMEOUT_MS).toBe(6_000)
   })
 
   it('posts Marketplace household fields only to the CareCompass backend', async () => {
