@@ -4,6 +4,18 @@ import { getBenefit } from '../api'
 import ExtensionPrompt from '../components/ExtensionPrompt'
 import { useSetPageContext } from '../pageContext'
 
+const NYC_DATASET_PAGE = 'https://data.cityofnewyork.us/d/kvhd-5fmu'
+
+function officialLinkLabel(benefit, isNycProgram) {
+  if (!isNycProgram || benefit?.officialLinkType === 'application') {
+    return 'Apply on the official site ↗'
+  }
+  if (benefit?.officialLinkType === 'agency') {
+    return 'Visit the agency website ↗'
+  }
+  return 'View official program information ↗'
+}
+
 export default function BenefitDetail() {
   const { id } = useParams()
   const { state } = useLocation()
@@ -16,6 +28,7 @@ export default function BenefitDetail() {
 
   const isNycProgram = benefit?.source === 'nyc_open_data'
   const matchReason = state?.matchReason || benefit?.eligibilitySummary || ''
+  const actionLabel = officialLinkLabel(benefit, isNycProgram)
 
   // Safe page-context summary — the benefit's public name/description and
   // the visible controls only, never the raw questionnaire intake.
@@ -34,12 +47,12 @@ export default function BenefitDetail() {
         : [],
       visibleControls: [
         { id: 'back-to-results-link', type: 'link', label: 'Back to results' },
-        ...(benefit?.applyUrl ? [{ id: 'apply-official-site-link', type: 'link', label: 'Apply on the official site' }] : []),
+        ...(benefit?.applyUrl ? [{ id: 'apply-official-site-link', type: 'link', label: actionLabel.replace(' ↗', '') }] : []),
       ],
       benefitDetail: benefit ? { name: benefit.name, description: benefit.description } : null,
       matchedBenefits: benefit ? [{ name: benefit.name, description: matchReason }] : [],
     }),
-    [benefit, id, isNycProgram, matchReason]
+    [actionLabel, benefit, id, isNycProgram, matchReason]
   )
   useSetPageContext(pageContext)
 
@@ -101,16 +114,28 @@ export default function BenefitDetail() {
       {benefit.applyUrl && (
         <>
           <ExtensionPrompt />
+          {isNycProgram && benefit.officialLinkType === 'agency' && (
+            <p className="official-link-note">
+              This program does not list a direct online page. This button opens the agency’s official website.
+            </p>
+          )}
           <a id="apply-official-site-link" className="btn btn-primary" href={benefit.applyUrl} target="_blank" rel="noreferrer"
             style={{ marginTop: 24 }}>
-            {isNycProgram ? 'Visit the official program site ↗' : 'Apply on the official site ↗'}
+            {actionLabel}
           </a>
         </>
       )}
 
+      {isNycProgram && !benefit.applyUrl && (
+        <div className="official-link-unavailable" role="status">
+          <strong>No official online page is listed.</strong>{' '}
+          Follow the “How to apply” instructions above, or call 311 for help finding the program.
+        </div>
+      )}
+
       {isNycProgram && (
         <p className="source-attribution">
-          Source: <a href="https://data.cityofnewyork.us/resource/kvhd-5fmu.json" target="_blank" rel="noreferrer">NYC Benefits and Programs Dataset</a>
+          Directory source: <a href={NYC_DATASET_PAGE} target="_blank" rel="noreferrer">NYC Benefits Platform program directory</a>
           {benefit.governmentAgency ? ` · ${benefit.governmentAgency}` : ''}
           {benefit.sourceUpdatedAt ? ` · Updated ${new Date(benefit.sourceUpdatedAt).toLocaleDateString()}` : ''}
         </p>

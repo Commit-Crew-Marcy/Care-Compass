@@ -65,6 +65,7 @@ class BenefitCard(CamelModel):
     description: str
     eligibility_summary: str
     apply_url: Optional[str] = None
+    official_link_type: Literal["application", "information", "agency"] = "application"
     program_type: str
     source: Literal["carecompass", "nyc_open_data"] = "carecompass"
     external_id: Optional[str] = None

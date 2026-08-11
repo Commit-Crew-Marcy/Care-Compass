@@ -695,6 +695,23 @@ form button.btn { margin-top: 6px; }
   line-height: 1.5;
 }
 .source-attribution a { color: var(--navy); font-weight: 700; }
+.official-link-note {
+  margin: 22px 0 -10px;
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  background: var(--tint-soft);
+  color: var(--navy);
+  line-height: 1.5;
+}
+.official-link-unavailable {
+  margin-top: 24px;
+  padding: 16px;
+  border: 2px solid var(--mid);
+  border-radius: var(--radius-md);
+  background: var(--tint-soft);
+  color: var(--navy);
+  line-height: 1.5;
+}
 
 /* Dismissible install suggestion on results/detail pages. It stays separate
    from the page's benefit cards so users cannot mistake it for a match. */

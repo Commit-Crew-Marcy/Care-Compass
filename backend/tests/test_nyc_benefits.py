@@ -1,9 +1,19 @@
 """Contract tests for the NYC Benefits and Programs dataset adapter."""
+from urllib.parse import parse_qs, urlparse
+
 from fastapi.testclient import TestClient
 
 from main import app
 from models.schemas import IntakeForm
-from services.nyc_benefits import find_nyc_programs, get_nyc_program, plain_text
+from services.nyc_benefits import (
+    _fetch_records,
+    application_instructions,
+    find_nyc_programs,
+    get_nyc_program,
+    html_http_urls,
+    official_program_link,
+    plain_text,
+)
 
 
 SAMPLE_RECORDS = [
@@ -73,6 +83,33 @@ def test_html_from_dataset_is_converted_to_plain_text():
     assert plain_text("NULL") == ""
 
 
+def test_dataset_fetch_requests_english_records_instead_of_truncating_languages(monkeypatch):
+    captured = {}
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+        def read(self):
+            return b"[]"
+
+    def fake_urlopen(request, timeout):
+        captured["url"] = request.full_url
+        captured["timeout"] = timeout
+        return FakeResponse()
+
+    monkeypatch.setattr("services.nyc_benefits.urlopen", fake_urlopen)
+
+    assert _fetch_records() == []
+    query = parse_qs(urlparse(captured["url"]).query)
+    assert query["$where"] == ["language='English'"]
+    assert query["$limit"] == ["500"]
+    assert captured["timeout"] == 10
+
+
 def test_only_selected_categories_are_returned_for_confirmed_nyc_residents():
     results = find_nyc_programs(intake(), records=SAMPLE_RECORDS)
     assert [item["id"] for item in results] == ["nyc-P015en"]
@@ -101,6 +138,62 @@ def test_detail_mapping_includes_official_eligibility_and_documents():
     assert detail["federal"] is False
     assert "Be 62 or older" in detail["eligibility_details"]
     assert detail["requirements"][0]["description"] == "Proof of age and rent."
+    assert detail["official_link_type"] == "application"
+
+
+def test_embedded_application_link_is_used_when_structured_urls_are_missing():
+    record = {
+        "unique_id_number": "P999en",
+        "government_agency": "Example Agency",
+        "how_to_apply_or_enroll_online": (
+            '<p>Use the <a href="https://agency.example/program">program page</a>.</p>'
+        ),
+    }
+
+    assert html_http_urls(record["how_to_apply_or_enroll_online"]) == [
+        "https://agency.example/program"
+    ]
+    assert official_program_link(record) == (
+        "https://agency.example/program",
+        "information",
+    )
+
+
+def test_alternate_application_instructions_are_not_dropped():
+    record = {
+        "how_to_apply_summary": "NULL",
+        "how_to_apply_or_enroll_in_person": (
+            "<p>Speak to the parent coordinator at your child’s school.</p>"
+        ),
+    }
+
+    assert application_instructions(record) == (
+        "Speak to the parent coordinator at your child’s school."
+    )
+
+
+def test_known_missing_and_dead_links_use_current_official_pages():
+    school_food = official_program_link({"unique_id_number": "P020en"})
+    primary_care = official_program_link({"unique_id_number": "P062en"})
+    cte = official_program_link({
+        "unique_id_number": "P101en",
+        "url_of_online_application": "http://cte.nyc/web/",
+    })
+
+    assert school_food == (
+        "https://www.schools.nyc.gov/school-life/school-meals",
+        "information",
+    )
+    assert primary_care[0].startswith("https://www.nychealthandhospitals.org/")
+    assert cte[0].startswith("https://www.schools.nyc.gov/")
+    assert "cte.nyc" not in cte[0]
+
+
+def test_agency_page_is_an_honest_last_resort():
+    assert official_program_link({
+        "unique_id_number": "P999en",
+        "government_agency": "NYC Department of Education (DOE)",
+    }) == ("https://www.schools.nyc.gov/home", "agency")
 
 
 def test_eligibility_endpoint_merges_nyc_results_without_changing_response_shape(monkeypatch):
