@@ -238,13 +238,6 @@ export default function Results() {
         </div>
       )}
 
-      {metadata.policyEngineCatalogUnavailable && (
-        <div className="source-notice source-notice--warning" role="status">
-          <strong>The PolicyEngine US estimate could not be loaded.</strong>{' '}
-          The CareCompass and city-program matches below are still available.
-        </div>
-      )}
-
       {!metadata.policyEngineCatalogUnavailable
         && metadata.policyEngineCalculationAvailable !== false
         && policyEngineResultCount > 0 && (

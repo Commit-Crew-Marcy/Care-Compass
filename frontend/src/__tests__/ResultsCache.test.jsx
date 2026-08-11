@@ -51,6 +51,35 @@ describe('Results caching', () => {
     localStorage.setItem('carecompass_latest_result_metadata', JSON.stringify({ policyEngineCatalogUnavailable: true }))
     renderResults('/results')
     expect(screen.getByText('SNAP')).toBeInTheDocument()
+    expect(screen.queryByText(/PolicyEngine US estimate could not be loaded/i)).not.toBeInTheDocument()
+  })
+
+  it('silently shows PolicyEngine catalog cards when scoring is unavailable', () => {
+    const policyResult = {
+      id: 'policyengine-ct-snap',
+      name: 'SNAP (Food Assistance)',
+      description: 'Monthly help purchasing groceries.',
+      programType: 'snap',
+      source: 'policyengine',
+      policyEngineCatalog: true,
+      eligibilityStatus: 'check_eligibility',
+      eligibilityLabel: 'Check eligibility',
+    }
+    renderResults({
+      pathname: '/results',
+      state: {
+        results: [policyResult],
+        intake: SAMPLE_INTAKE,
+        metadata: {
+          policyEngineCatalogUnavailable: false,
+          policyEngineCalculationAvailable: false,
+        },
+      },
+    })
+
+    expect(screen.getByText('SNAP (Food Assistance)')).toBeInTheDocument()
+    expect(screen.queryByText(/PolicyEngine eligibility scoring/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/temporarily unavailable/i)).not.toBeInTheDocument()
   })
 
   it('shows "No results yet" when there is neither state nor a cache', () => {
