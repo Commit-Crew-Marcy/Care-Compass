@@ -37,6 +37,19 @@
     return cleanText(redactSensitiveText(value), maxLength)
   }
 
+  function prepareContextText(pageText, dialogTexts = [], maxLength = MAX_PAGE_TEXT_LENGTH) {
+    const dialogs = []
+    for (const value of Array.isArray(dialogTexts) ? dialogTexts : []) {
+      const text = preparePageText(value, maxLength)
+      if (text && !dialogs.includes(text)) dialogs.push(text)
+    }
+
+    const sections = dialogs.map((text) => `Open dialog: ${text}`)
+    const page = preparePageText(pageText, maxLength)
+    if (page) sections.push(`Page: ${page}`)
+    return preparePageText(sections.join('\n\n'), maxLength)
+  }
+
   function isSupportedPageUrl(value) {
     try {
       const url = new URL(value)
@@ -118,6 +131,7 @@
     isSafeClickDescriptor,
     isLocalPageUrl,
     isSupportedPageUrl,
+    prepareContextText,
     preparePageText,
     redactSensitiveText,
     selectApiBase,

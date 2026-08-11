@@ -1,12 +1,20 @@
 (function startCareCompassContentScript() {
   'use strict'
 
-  if (globalThis.__CARE_COMPASS_CONTENT_SCRIPT__) return
-  globalThis.__CARE_COMPASS_CONTENT_SCRIPT__ = true
-
   const helpers = globalThis.CareCompassExtension
   const elementRegistry = new Map()
   let latestInteractiveElements = []
+  const VISIBLE_DIALOG_SELECTOR = [
+    'dialog[open]',
+    '[role="dialog"]',
+    '[role="alertdialog"]',
+    '[aria-modal="true"]',
+  ].join(',')
+  const REMOVED_CONTENT_SELECTOR = [
+    'script', 'style', 'noscript', 'template', 'svg', 'canvas',
+    'input', 'textarea', 'select', '[hidden]', '[aria-hidden="true"]',
+    '[data-care-compass-private]',
+  ].join(',')
 
   document.documentElement.setAttribute('data-care-compass-extension', 'installed')
   document.dispatchEvent(new Event('carecompass-extension-ready'))
@@ -57,19 +65,34 @@
     }
   }
 
-  function collectPageText() {
-    const source = document.querySelector('main, [role="main"], article') || document.body
-    if (!source) return ''
-    const clone = source.cloneNode(true)
-    clone.querySelectorAll([
-      'script', 'style', 'noscript', 'template', 'svg', 'canvas',
-      'input', 'textarea', 'select', '[hidden]', '[aria-hidden="true"]',
-      '[data-care-compass-private]',
-    ].join(',')).forEach((element) => element.remove())
-    return helpers.preparePageText(clone.innerText || clone.textContent || '')
+  function collectVisibleDialogs() {
+    const candidates = Array.from(document.querySelectorAll(VISIBLE_DIALOG_SELECTOR))
+      .filter(isVisible)
+    return candidates.filter((element, index) => (
+      !candidates.some((other, otherIndex) => otherIndex < index && other.contains(element))
+    ))
   }
 
-  function collectInteractiveElements() {
+  function textFrom(source, { removeDialogs = false } = {}) {
+    if (!source) return ''
+    const clone = source.cloneNode(true)
+    clone.querySelectorAll(REMOVED_CONTENT_SELECTOR).forEach((element) => element.remove())
+    if (removeDialogs) {
+      clone.querySelectorAll(VISIBLE_DIALOG_SELECTOR).forEach((element) => element.remove())
+    }
+    return clone.innerText || clone.textContent || ''
+  }
+
+  function collectPageText(dialogs) {
+    const source = document.querySelector('main, [role="main"], article') || document.body
+    const dialogTexts = dialogs.map((dialog) => textFrom(dialog))
+    return helpers.prepareContextText(
+      textFrom(source, { removeDialogs: true }),
+      dialogTexts
+    )
+  }
+
+  function collectInteractiveElements(dialogs) {
     elementRegistry.clear()
     const selector = [
       'a[href]',
@@ -81,7 +104,11 @@
       '[role="link"]',
       '[tabindex]:not([tabindex="-1"])',
     ].join(',')
-    const elements = Array.from(document.querySelectorAll(selector))
+    const dialogElements = dialogs.flatMap((dialog) => Array.from(dialog.querySelectorAll(selector)))
+    const elements = Array.from(new Set([
+      ...dialogElements,
+      ...document.querySelectorAll(selector),
+    ]))
     const result = []
 
     for (const element of elements) {
@@ -114,8 +141,16 @@
   }
 
   function buildPageContext() {
+    const dialogs = collectVisibleDialogs()
     const selectedText = helpers.preparePageText(String(getSelection?.() || ''), 1500)
-    const headings = Array.from(document.querySelectorAll('h1, h2, h3'))
+    const dialogHeadings = dialogs.flatMap((dialog) => (
+      Array.from(dialog.querySelectorAll('h1, h2, h3'))
+    ))
+    const headingElements = Array.from(new Set([
+      ...dialogHeadings,
+      ...document.querySelectorAll('h1, h2, h3'),
+    ]))
+    const headings = headingElements
       .filter(isVisible)
       .map((element) => helpers.cleanText(element.textContent, 240))
       .filter(Boolean)
@@ -127,9 +162,9 @@
       pageTitle: helpers.cleanText(document.title, 300),
       heading: headings[0] || '',
       sectionHeadings: headings.slice(1),
-      pageText: collectPageText(),
+      pageText: collectPageText(dialogs),
       selectedText,
-      interactiveElements: collectInteractiveElements(),
+      interactiveElements: collectInteractiveElements(dialogs),
     }
   }
 
@@ -189,7 +224,7 @@
     return { ok: true }
   }
 
-  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  function handleCareCompassMessage(message, sender, sendResponse) {
     if (message?.type === 'CARE_COMPASS_PING') {
       sendResponse({ ok: true })
       return false
@@ -203,5 +238,21 @@
       return false
     }
     return false
-  })
+  }
+
+  // Chrome does not automatically rerun content scripts in tabs that were
+  // already open when an unpacked extension is reloaded. popup.js injects
+  // this file again when its ping fails. Replace the previous handler instead
+  // of returning early, because the previous handler belongs to the invalid
+  // extension context and can no longer receive messages.
+  const previousHandler = globalThis.__CARE_COMPASS_MESSAGE_HANDLER__
+  if (previousHandler) {
+    try {
+      chrome.runtime.onMessage.removeListener(previousHandler)
+    } catch {
+      // The old extension context may already be invalidated.
+    }
+  }
+  globalThis.__CARE_COMPASS_MESSAGE_HANDLER__ = handleCareCompassMessage
+  chrome.runtime.onMessage.addListener(handleCareCompassMessage)
 })()

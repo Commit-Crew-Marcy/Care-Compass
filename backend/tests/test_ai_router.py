@@ -13,7 +13,11 @@ from models.schemas import ExtensionChatRequest, ExtensionPageContext, PageConte
 from routers.ai import (
     ACTION_TOOL,
     EXTENSION_ACTION_TOOL,
+    EXTENSION_GEMINI_TIMEOUT_MS,
+    EXTENSION_MODE_LIMITS,
+    EXTENSION_SYSTEM_PROMPT,
     UNAVAILABLE_MESSAGE,
+    UNREACHABLE_MESSAGE,
     build_extension_user_content,
     enforce_step_limit,
     enforce_word_limit,
@@ -21,6 +25,8 @@ from routers.ai import (
     validate_action,
     validate_extension_action,
 )
+from services.gemini import DEFAULT_GEMINI_MODEL, GeminiServiceError
+from services.groq import DEFAULT_GROQ_MODEL, GroqServiceError
 
 
 @pytest.fixture(scope="module")
@@ -283,6 +289,7 @@ def extension_context(allowed_actions=None):
 
 def test_extension_missing_api_key_returns_graceful_503(client, monkeypatch):
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
     response = client.post(
         "/api/ai/extension/chat",
         json={
@@ -296,6 +303,7 @@ def test_extension_missing_api_key_returns_graceful_503(client, monkeypatch):
 
 def test_extension_rejects_non_web_page_url(client, monkeypatch):
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
     context = extension_context().model_dump(by_alias=True)
     context["url"] = "chrome://extensions"
     response = client.post(
@@ -356,7 +364,15 @@ def test_extension_prompt_emphasizes_the_current_answer_mode_over_history():
 
     assert "Answer mode for this turn: MORE DETAIL" in content
     assert "even if recent history used a different mode" in content
+    assert "replaces any earlier page state" in content
     assert "A shorter answer from Simple mode." in content
+
+
+def test_extension_prompt_compares_visible_choices_instead_of_repeating_old_steps():
+    assert "compare them now using their exact names" in EXTENSION_SYSTEM_PROMPT
+    assert "Include every visible choice" in EXTENSION_SYSTEM_PROMPT
+    assert "Do not send the user back to an earlier step" in EXTENSION_SYSTEM_PROMPT
+    assert EXTENSION_MODE_LIMITS["simple"] == (70, 3)
 
 
 def test_extension_uses_gemini_and_returns_a_revalidated_action(client, monkeypatch):
@@ -370,8 +386,14 @@ def test_extension_uses_gemini_and_returns_a_revalidated_action(client, monkeypa
         )
 
     monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
-    monkeypatch.setenv("GEMINI_MODEL", "test-gemini-model")
+    monkeypatch.setenv("GROQ_API_KEY", "test-groq-key")
+    monkeypatch.setenv("GEMINI_MODEL", "website-only-model")
+    monkeypatch.delenv("EXTENSION_GEMINI_MODEL", raising=False)
     monkeypatch.setattr("routers.ai.generate_gemini_content", fake_generate)
+    monkeypatch.setattr(
+        "routers.ai.generate_groq_content",
+        lambda **kwargs: pytest.fail("Groq must not run when Gemini succeeds"),
+    )
 
     response = client.post(
         "/api/ai/extension/chat",
@@ -389,9 +411,108 @@ def test_extension_uses_gemini_and_returns_a_revalidated_action(client, monkeypa
         "requiresConfirmation": False,
     }
     assert captured["api_key"] == "test-gemini-key"
-    assert captured["model"] == "test-gemini-model"
-    assert captured["fallback_model"] == "gemini-3-flash-preview"
+    assert captured["model"] == DEFAULT_GEMINI_MODEL
     assert captured["tool_definition"]["name"] == "suggest_extension_action"
+    assert captured["timeout_ms"] == EXTENSION_GEMINI_TIMEOUT_MS
+
+
+def test_extension_model_has_an_independent_override(client, monkeypatch):
+    captured = {}
+    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
+    monkeypatch.setenv("GEMINI_MODEL", "website-only-model")
+    monkeypatch.setenv("EXTENSION_GEMINI_MODEL", "extension-test-model")
+    monkeypatch.setattr(
+        "routers.ai.generate_gemini_content",
+        lambda **kwargs: (captured.update(kwargs) or ("Short answer.", None)),
+    )
+
+    response = client.post(
+        "/api/ai/extension/chat",
+        json={
+            "question": "What does this page do?",
+            "pageContext": extension_context().model_dump(by_alias=True),
+        },
+    )
+
+    assert response.status_code == 200
+    assert captured["model"] == "extension-test-model"
+
+
+def test_extension_falls_back_to_groq_when_gemini_fails(client, monkeypatch):
+    captured = {}
+    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
+    monkeypatch.setenv("GROQ_API_KEY", "test-groq-key")
+    monkeypatch.delenv("GROQ_MODEL", raising=False)
+    monkeypatch.setattr(
+        "routers.ai.generate_gemini_content",
+        lambda **kwargs: (_ for _ in ()).throw(GeminiServiceError("busy")),
+    )
+    monkeypatch.setattr(
+        "routers.ai.generate_groq_content",
+        lambda **kwargs: (captured.update(kwargs) or "Groq explained this page."),
+    )
+
+    response = client.post(
+        "/api/ai/extension/chat",
+        json={
+            "question": "What does this page do?",
+            "pageContext": extension_context().model_dump(by_alias=True),
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "message": "Groq explained this page.",
+        "action": None,
+    }
+    assert captured["api_key"] == "test-groq-key"
+    assert captured["model"] == DEFAULT_GROQ_MODEL
+    assert "text-only fallback provider" in captured["system_prompt"]
+
+
+def test_extension_can_use_groq_when_primary_key_is_missing(client, monkeypatch):
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.setenv("GROQ_API_KEY", "test-groq-key")
+    monkeypatch.setattr(
+        "routers.ai.generate_groq_content",
+        lambda **kwargs: "The fallback is available.",
+    )
+
+    response = client.post(
+        "/api/ai/extension/chat",
+        json={
+            "question": "Explain this page.",
+            "pageContext": extension_context().model_dump(by_alias=True),
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["message"] == "The fallback is available."
+    assert response.json()["action"] is None
+
+
+def test_extension_returns_503_when_both_providers_fail(client, monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
+    monkeypatch.setenv("GROQ_API_KEY", "test-groq-key")
+    monkeypatch.setattr(
+        "routers.ai.generate_gemini_content",
+        lambda **kwargs: (_ for _ in ()).throw(GeminiServiceError("busy")),
+    )
+    monkeypatch.setattr(
+        "routers.ai.generate_groq_content",
+        lambda **kwargs: (_ for _ in ()).throw(GroqServiceError("busy")),
+    )
+
+    response = client.post(
+        "/api/ai/extension/chat",
+        json={
+            "question": "Explain this page.",
+            "pageContext": extension_context().model_dump(by_alias=True),
+        },
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == UNREACHABLE_MESSAGE
 
 
 def test_extension_rejects_an_unsafe_gemini_action(client, monkeypatch):

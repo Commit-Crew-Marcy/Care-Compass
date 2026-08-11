@@ -7,13 +7,13 @@ short, plain language and helps the user find safe next steps.
 
 - Reads visible page text only after the user opens the extension.
 - Sends a filtered semantic page summary to the CareCompass FastAPI backend.
-- Uses Gemini through the CareCompass backend; the Gemini key is never stored
-  in Chrome or sent to a website.
+- Uses Gemini through the CareCompass backend and can fall back to a text-only
+  Groq response; neither provider key is stored in Chrome or sent to a website.
 - Can scroll to or focus a visible control.
 - Can select a safe navigation link or non-form button only after the user
   confirms. It will not fill or submit forms, apply for benefits, enter
   sensitive data, or click account/payment controls.
-- Offers Simple (up to 80 words) and More detail (up to 160 words) responses,
+- Offers Simple (up to 50 words) and More detail (up to 160 words) responses,
   plus browser read-aloud support.
 
 The extension requests `activeTab` instead of `<all_urls>`. Chrome grants page
@@ -23,9 +23,10 @@ the user leaves the site.
 ## Run locally
 
 1. Copy `backend/.env.example` to `backend/.env`, set `GEMINI_API_KEY`, and
-   start the backend. `GEMINI_MODEL` is optional and defaults to
-   the low-latency `gemini-3.1-flash-lite`; temporary overloads fall back to
-   `gemini-3-flash-preview`.
+   start the backend. The extension defaults to the stable, low-latency
+   `gemini-3.1-flash-lite`; `EXTENSION_GEMINI_MODEL` can override it. Set
+   `GROQ_API_KEY` to enable the text-only `openai/gpt-oss-20b` fallback when
+   Gemini is unavailable. Neither key belongs in the extension itself.
 2. Start the CareCompass frontend on `http://localhost:5173`.
 3. Open `chrome://extensions` in Chrome.
 4. Turn on **Developer mode**.

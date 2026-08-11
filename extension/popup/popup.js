@@ -22,6 +22,7 @@ let history = []
 let pendingAction = null
 let busy = false
 let speakingButton = null
+let responseStatusTimer = null
 
 function callChrome(fn) {
   return new Promise((resolve, reject) => {
@@ -122,6 +123,21 @@ async function ensureContentScript() {
   }
 }
 
+async function refreshPageContext() {
+  try {
+    await ensureContentScript()
+    const result = await sendToTab({ type: 'CARE_COMPASS_GET_PAGE_CONTEXT' })
+    if (!result?.ok || !result.pageContext) throw new Error('Missing page context')
+    pageContext = result.pageContext
+    pageTitleElement.textContent = pageContext.pageTitle || pageContext.domain
+    return pageContext
+  } catch {
+    const error = new Error('I could not read the latest version of this page. Please select the extension again.')
+    error.name = 'PageContextError'
+    throw error
+  }
+}
+
 function labelForAction(action) {
   return pageContext?.interactiveElements?.find((element) => element.id === action.target)?.label || 'this item'
 }
@@ -164,17 +180,27 @@ async function sendQuestion(rawQuestion) {
   const recentHistory = history.slice(-6)
   history.push({ role: 'user', text: question })
   setBusy(true)
+  setStatus('Reading the latest page…')
 
   try {
+    // Benefits sites often update in place without a full page load. Always
+    // take a fresh snapshot so the answer reflects the form step, results, or
+    // dialog the user is looking at right now.
+    const currentPageContext = await refreshPageContext()
+    setStatus('Preparing your answer…')
+    responseStatusTimer = setTimeout(() => {
+      setStatus('Still working. This may take a few more seconds.')
+    }, 5_000)
     const result = await callChrome((done) => chrome.runtime.sendMessage({
       type: 'CARE_COMPASS_ASK_GEMINI',
       question,
-      pageContext,
+      pageContext: currentPageContext,
       responseMode: responseMode(),
       history: recentHistory,
     }, done))
 
     if (!result?.ok) {
+      setStatus('The guide could not answer right now.', 'error')
       addMessage('assistant', result?.message || 'The CareCompass Guide is unavailable right now.', { error: true })
       return
     }
@@ -183,9 +209,16 @@ async function sendQuestion(rawQuestion) {
     addMessage('assistant', answer || 'I could not prepare an answer for this page.')
     history.push({ role: 'assistant', text: answer })
     handleAction(result.data?.action)
-  } catch {
-    addMessage('assistant', 'I could not reach the CareCompass Guide. Please try again.', { error: true })
+    setStatus('Ready to help with this page', 'ready')
+  } catch (error) {
+    const message = error?.name === 'PageContextError'
+      ? error.message
+      : 'I could not reach the CareCompass Guide. Please try again.'
+    setStatus(message, 'error')
+    addMessage('assistant', message, { error: true })
   } finally {
+    clearTimeout(responseStatusTimer)
+    responseStatusTimer = null
     setBusy(false)
     questionInput.focus()
   }
@@ -218,11 +251,7 @@ async function loadTab(tab) {
       throw new Error('Open a regular website to use the guide.')
     }
 
-    await ensureContentScript()
-    const result = await sendToTab({ type: 'CARE_COMPASS_GET_PAGE_CONTEXT' })
-    if (!result?.ok || !result.pageContext) throw new Error('I could not read this page safely.')
-    pageContext = result.pageContext
-    pageTitleElement.textContent = pageContext.pageTitle || pageContext.domain
+    await refreshPageContext()
     setStatus('Ready to help with this page', 'ready')
   } catch (error) {
     pageContext = null
@@ -285,7 +314,11 @@ confirmActionButton.addEventListener('click', async () => {
   const action = pendingAction
   pendingAction = null
   confirmationElement.hidden = true
-  await executeAction(action, true)
+  try {
+    await executeAction(action, true)
+  } catch {
+    addMessage('assistant', 'I could not complete that action.', { error: true })
+  }
 })
 
 cancelActionButton.addEventListener('click', () => {
@@ -300,5 +333,9 @@ chrome.storage.local.get({ careCompassResponseMode: 'simple' }, ({ careCompassRe
     input.checked = true
     input.dispatchEvent(new Event('change'))
   }
-  initialize()
+  initialize().catch(() => {
+    pageContext = null
+    setBusy(false)
+    setStatus('The extension was reloaded. Please select it again.', 'error')
+  })
 })
