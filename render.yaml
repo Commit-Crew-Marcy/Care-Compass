@@ -10,3 +10,8 @@ services:
         generateValue: true
       - key: PYTHON_VERSION
         value: 3.12.3
+      # The full PolicyEngine model exceeds the memory budget of the web API
+      # service. Keep the lightweight 50-state catalog available here; use a
+      # dedicated larger worker before enabling household calculations.
+      - key: POLICYENGINE_CALCULATION_ENABLED
+        value: "false"

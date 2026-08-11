@@ -12,6 +12,7 @@ from services.policyengine import (
     STATE_NAMES,
     TANF_PROGRAMS,
     get_program_catalog,
+    policyengine_calculation_enabled,
 )
 
 
@@ -202,3 +203,34 @@ def test_model_failure_returns_check_eligibility_catalog_fallback(monkeypatch):
     assert body["programs"]
     assert all(program["eligibilityStatus"] == "check_eligibility" for program in body["programs"])
     assert all(program["eligibilityLabel"] == "Check eligibility" for program in body["programs"])
+
+
+def test_render_uses_catalog_without_loading_the_full_policyengine_model(monkeypatch):
+    monkeypatch.setenv("RENDER", "true")
+    monkeypatch.delenv("POLICYENGINE_CALCULATION_ENABLED", raising=False)
+    monkeypatch.setattr(
+        policyengine_service,
+        "_run_policyengine_calculation",
+        lambda **_: (_ for _ in ()).throw(AssertionError("model must not load")),
+    )
+
+    response = TestClient(app).post("/api/policyengine/eligibility", json={
+        "age": 30,
+        "income": 25_000,
+        "state": "CT",
+        "householdSize": 1,
+        "immigrationStatus": "citizen",
+    })
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["calculationAvailable"] is False
+    assert body["programs"]
+    assert "dedicated calculation worker" in body["calculationNote"]
+
+
+def test_explicit_calculation_setting_overrides_render_default(monkeypatch):
+    monkeypatch.setenv("RENDER", "true")
+    monkeypatch.setenv("POLICYENGINE_CALCULATION_ENABLED", "true")
+
+    assert policyengine_calculation_enabled() is True

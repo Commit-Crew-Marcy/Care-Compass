@@ -29,6 +29,19 @@ _warmup_lock = threading.Lock()
 _model_warmed = False
 
 
+def policyengine_calculation_enabled() -> bool:
+    """Keep the full model out of memory-constrained web API processes.
+
+    Local development enables calculations by default. Render disables them
+    unless a larger dedicated worker explicitly opts in; the lightweight
+    state program catalog remains available in either mode.
+    """
+    configured = os.getenv("POLICYENGINE_CALCULATION_ENABLED")
+    if configured is not None:
+        return configured.strip().lower() in {"1", "true", "yes", "on"}
+    return not bool(os.getenv("RENDER") or os.getenv("RENDER_SERVICE_ID"))
+
+
 STATE_NAMES: Dict[str, str] = {
     "AL": "Alabama", "AK": "Alaska", "AZ": "Arizona", "AR": "Arkansas",
     "CA": "California", "CO": "Colorado", "CT": "Connecticut",
@@ -584,6 +597,8 @@ def _run_policyengine_calculation(**kwargs):
 def warm_policyengine_model() -> None:
     """Load the model once while the user is completing the questionnaire."""
     global _model_warmed
+    if not policyengine_calculation_enabled():
+        return
     if _model_warmed:
         return
     with _warmup_lock:
@@ -647,6 +662,22 @@ def _neutral_program(program: dict, year: int, reason: str) -> dict:
         "calculation_year": year,
         "model_calculated": False,
         "estimated_annual_amount": None,
+    }
+
+
+def _catalog_fallback(catalog: dict, year: int, reason: str, note: str) -> dict:
+    return {
+        "state": catalog["state"],
+        "state_name": catalog["state_name"],
+        "programs": [
+            _neutral_program(program, year, reason)
+            for program in catalog["programs"]
+        ],
+        "source_repository": catalog["source_repository"],
+        "source_commit": catalog["source_commit"],
+        "calculation_year": year,
+        "calculation_available": False,
+        "calculation_note": note,
     }
 
 
@@ -733,6 +764,21 @@ def calculate_program_eligibility(request: PolicyEngineEligibilityRequest) -> di
     """
     catalog = get_program_catalog(request.state)
     year = _calculation_year()
+    if not policyengine_calculation_enabled():
+        return _catalog_fallback(
+            catalog,
+            year,
+            (
+                "The full PolicyEngine calculation is not enabled on this web server. "
+                "Check the official program requirements; the modeled program catalog "
+                "is still available."
+            ),
+            (
+                "PolicyEngine's program catalog is available, but household scoring "
+                "requires a dedicated calculation worker."
+            ),
+        )
+
     spouse_present = any(
         member.relationship == "spouse" for member in request.additional_people
     )
@@ -755,26 +801,18 @@ def calculate_program_eligibility(request: PolicyEngineEligibilityRequest) -> di
         )
     except Exception as exc:  # model errors must degrade to catalog results
         logger.warning("PolicyEngine household calculation unavailable: %s", type(exc).__name__)
-        fallback_reason = (
-            "CareCompass could not run the PolicyEngine estimate right now. Check the "
-            "official program requirements; the program catalog is still available."
-        )
-        return {
-            "state": catalog["state"],
-            "state_name": catalog["state_name"],
-            "programs": [
-                _neutral_program(program, year, fallback_reason)
-                for program in catalog["programs"]
-            ],
-            "source_repository": catalog["source_repository"],
-            "source_commit": catalog["source_commit"],
-            "calculation_year": year,
-            "calculation_available": False,
-            "calculation_note": (
+        return _catalog_fallback(
+            catalog,
+            year,
+            (
+                "CareCompass could not run the PolicyEngine estimate right now. Check "
+                "the official program requirements; the program catalog is still available."
+            ),
+            (
                 "PolicyEngine scoring was unavailable, so every modeled program is shown "
                 "with a Check eligibility status."
             ),
-        }
+        )
 
     programs = [
         _score_program(program, request.state, request, result, year)

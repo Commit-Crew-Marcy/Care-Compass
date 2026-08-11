@@ -1,7 +1,7 @@
 'use strict'
 
 const statusElement = document.querySelector('#status')
-const allowedModes = new Set(['automatic', 'local', 'production'])
+const allowedModes = new Set(['automatic', 'local'])
 
 function selectMode(mode) {
   const safeMode = allowedModes.has(mode) ? mode : 'automatic'

@@ -16,15 +16,15 @@
         <legend>Backend</legend>
         <label>
           <input type="radio" name="api-mode" value="automatic">
-          <span><strong>Automatic</strong><small>Use localhost for local pages and the deployed API for other sites.</small></span>
+          <span><strong>Automatic</strong><small>Use http://localhost:8000 while the unpacked extension is in development.</small></span>
         </label>
         <label>
           <input type="radio" name="api-mode" value="local">
           <span><strong>Local development</strong><small>Use http://localhost:8000 on every website. Select this while testing the unpacked extension.</small></span>
         </label>
         <label>
-          <input type="radio" name="api-mode" value="production">
-          <span><strong>Deployed backend</strong><small>Always use the production CareCompass API.</small></span>
+          <input type="radio" name="api-mode" value="production" disabled>
+          <span><strong>Deployed backend</strong><small>Disabled while the extension is still in local development.</small></span>
         </label>
       </fieldset>
 

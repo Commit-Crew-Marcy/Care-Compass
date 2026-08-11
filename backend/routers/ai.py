@@ -14,6 +14,13 @@ import json
 import logging
 import os
 import re
+import time
+from concurrent.futures import (
+    FIRST_COMPLETED,
+    ThreadPoolExecutor,
+    TimeoutError as FutureTimeoutError,
+    wait,
+)
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
@@ -190,10 +197,13 @@ You are the text-only fallback provider. Do not claim that you clicked,
 focused, scrolled to, opened, or changed anything on the page. Give the user a
 concise explanation or instructions they can follow themselves."""
 
-# A slow primary should hand off quickly enough that the fallback can still
-# answer inside the extension's overall 15-second request limit. The website
-# assistant keeps the adapter's more generous default timeout.
-EXTENSION_GEMINI_TIMEOUT_MS = 5_000
+# Gemini rejects manually configured transport deadlines below ten seconds.
+# The route has its own five-second user-facing deadline, independent of that
+# transport setting. If Gemini has not answered promptly, Groq starts in
+# parallel and the first successful provider wins.
+EXTENSION_GEMINI_TIMEOUT_MS = 10_000
+EXTENSION_PROVIDER_HEDGE_DELAY_SECONDS = 1.25
+EXTENSION_PROVIDER_DEADLINE_SECONDS = 5.0
 
 EXTENSION_ACTION_TOOL = {
     "name": "suggest_extension_action",
@@ -369,6 +379,95 @@ def build_extension_user_content(body: ExtensionChatRequest) -> str:
     return "\n\n".join(parts)
 
 
+def generate_extension_content(
+    *,
+    gemini_api_key: Optional[str],
+    groq_api_key: Optional[str],
+    mode_instruction: str,
+    user_content: str,
+) -> tuple[str, Optional[dict]]:
+    """Return the first usable provider response within one shared deadline."""
+
+    def call_gemini() -> tuple[str, Optional[dict]]:
+        return generate_gemini_content(
+            api_key=gemini_api_key or "",
+            model=os.getenv("EXTENSION_GEMINI_MODEL", DEFAULT_GEMINI_MODEL),
+            system_prompt=EXTENSION_SYSTEM_PROMPT + mode_instruction,
+            user_content=user_content,
+            tool_definition=EXTENSION_ACTION_TOOL,
+            timeout_ms=EXTENSION_GEMINI_TIMEOUT_MS,
+        )
+
+    def call_groq() -> tuple[str, Optional[dict]]:
+        message = generate_groq_content(
+            api_key=groq_api_key or "",
+            model=os.getenv("GROQ_MODEL", DEFAULT_GROQ_MODEL),
+            system_prompt=(
+                EXTENSION_SYSTEM_PROMPT
+                + mode_instruction
+                + GROQ_FALLBACK_INSTRUCTION
+            ),
+            user_content=user_content,
+        )
+        return message, None
+
+    if not gemini_api_key:
+        return call_groq()
+    if not groq_api_key:
+        return call_gemini()
+
+    started_at = time.monotonic()
+    executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="cc-guide")
+    gemini_future = executor.submit(call_gemini)
+    pending = {}
+
+    try:
+        try:
+            return gemini_future.result(
+                timeout=EXTENSION_PROVIDER_HEDGE_DELAY_SECONDS
+            )
+        except FutureTimeoutError:
+            pending[gemini_future] = "Gemini"
+        except GeminiServiceError as exc:
+            logger.warning("Extension Gemini primary failed; trying Groq: %s", exc)
+        except Exception:
+            logger.exception("Unexpected extension Gemini provider failure")
+
+        groq_future = executor.submit(call_groq)
+        pending[groq_future] = "Groq"
+
+        while pending:
+            remaining = (
+                EXTENSION_PROVIDER_DEADLINE_SECONDS
+                - (time.monotonic() - started_at)
+            )
+            if remaining <= 0:
+                break
+
+            completed, _ = wait(
+                pending,
+                timeout=remaining,
+                return_when=FIRST_COMPLETED,
+            )
+            if not completed:
+                break
+
+            for future in completed:
+                provider = pending.pop(future)
+                try:
+                    return future.result()
+                except (GeminiServiceError, GroqServiceError) as exc:
+                    logger.warning("Extension %s provider failed: %s", provider, exc)
+                except Exception:
+                    logger.exception("Unexpected extension %s provider failure", provider)
+
+        raise RuntimeError("No extension AI provider returned before the deadline")
+    finally:
+        for future in pending:
+            future.cancel()
+        executor.shutdown(wait=False, cancel_futures=True)
+
+
 @router.post("/chat", response_model=ChatResponse, response_model_by_alias=True)
 def chat(body: ChatRequest):
     api_key = os.getenv("GEMINI_API_KEY")
@@ -427,41 +526,16 @@ def extension_chat(body: ExtensionChatRequest):
         body.response_mode, MODE_INSTRUCTIONS["simple"]
     )
     user_content = build_extension_user_content(body)
-    message_text = ""
-    raw_action = None
-
-    if gemini_api_key:
-        try:
-            message_text, raw_action = generate_gemini_content(
-                api_key=gemini_api_key,
-                # The extension has its own setting so a website-chat override
-                # cannot silently move it away from the requested low-latency model.
-                model=os.getenv("EXTENSION_GEMINI_MODEL", DEFAULT_GEMINI_MODEL),
-                system_prompt=EXTENSION_SYSTEM_PROMPT + mode_instruction,
-                user_content=user_content,
-                tool_definition=EXTENSION_ACTION_TOOL,
-                timeout_ms=EXTENSION_GEMINI_TIMEOUT_MS,
-            )
-        except GeminiServiceError as exc:
-            logger.warning("Extension Gemini primary failed; trying Groq: %s", exc)
-
-    if not message_text and raw_action is None:
-        if not groq_api_key:
-            raise HTTPException(status_code=503, detail=UNREACHABLE_MESSAGE)
-        try:
-            message_text = generate_groq_content(
-                api_key=groq_api_key,
-                model=os.getenv("GROQ_MODEL", DEFAULT_GROQ_MODEL),
-                system_prompt=(
-                    EXTENSION_SYSTEM_PROMPT
-                    + mode_instruction
-                    + GROQ_FALLBACK_INSTRUCTION
-                ),
-                user_content=user_content,
-            )
-        except GroqServiceError as exc:
-            logger.error("Extension Groq fallback failed: %s", exc)
-            raise HTTPException(status_code=503, detail=UNREACHABLE_MESSAGE)
+    try:
+        message_text, raw_action = generate_extension_content(
+            gemini_api_key=gemini_api_key,
+            groq_api_key=groq_api_key,
+            mode_instruction=mode_instruction,
+            user_content=user_content,
+        )
+    except (GeminiServiceError, GroqServiceError, RuntimeError) as exc:
+        logger.error("Extension providers unavailable: %s", exc)
+        raise HTTPException(status_code=503, detail=UNREACHABLE_MESSAGE)
 
     action = validate_extension_action(raw_action, body.page_context) if raw_action else None
 

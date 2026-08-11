@@ -14,9 +14,9 @@ importScripts('shared.js')
 // ordinary website, not just unsupported ones.
 chrome.action.onClicked.addListener((tab) => {
   if (!tab?.id) return
-  // Start waking a sleeping Render service while the user reads the panel.
-  // This overlaps cold-start time with page-context loading instead of adding
-  // it after the user sends their first question.
+  // Warm the selected backend while the user reads the panel. This overlaps
+  // startup time with page-context loading instead of adding it after the
+  // user sends their first question.
   warmUpApiForPage(tab.url).catch(() => {})
   // sidePanel.open() can throw synchronously (not just reject) for some
   // argument/state errors — wrapped so a failure here can never stop the
@@ -36,7 +36,7 @@ chrome.action.onClicked.addListener((tab) => {
 const LOCAL_API_BASE = 'http://localhost:8000'
 const PRODUCTION_API_BASE = 'https://care-compass-4gj5.onrender.com'
 const EXTENSION_CHAT_PATH = '/api/ai/extension/chat'
-const REQUEST_TIMEOUT_MS = 15_000
+const REQUEST_TIMEOUT_MS = 8_000
 
 function getApiMode() {
   return new Promise((resolve) => {

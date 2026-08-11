@@ -246,15 +246,6 @@ export default function Results() {
       )}
 
       {!metadata.policyEngineCatalogUnavailable
-        && metadata.policyEngineCalculationAvailable === false
-        && policyEngineResultCount > 0 && (
-        <div className="source-notice source-notice--warning" role="status">
-          <strong>PolicyEngine eligibility scoring is temporarily unavailable.</strong>{' '}
-          Its modeled programs are still marked Check eligibility so you can review their official requirements.
-        </div>
-      )}
-
-      {!metadata.policyEngineCatalogUnavailable
         && metadata.policyEngineCalculationAvailable !== false
         && policyEngineResultCount > 0 && (
         <div className="source-notice">

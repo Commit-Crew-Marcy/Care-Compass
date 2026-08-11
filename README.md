@@ -193,6 +193,9 @@ curl -X POST http://localhost:8000/api/eligibility/check \
    `GEMINI_API_KEY` to enable the website assistant and Browser Guide, plus
    `GROQ_API_KEY` to enable the Browser Guide's fallback. Add
    `CMS_MARKETPLACE_API_KEY` to enable current Marketplace plan estimates.
+   Keep `POLICYENGINE_CALCULATION_ENABLED=false` on a memory-limited web
+   service. The 50-state PolicyEngine catalog remains available; household
+   scoring should only be enabled on a dedicated larger worker.
 5. Deploy, then open the Render shell and run `python -m db.seed` once
 6. Copy your Render URL (e.g. https://carecompass-api.onrender.com)
 

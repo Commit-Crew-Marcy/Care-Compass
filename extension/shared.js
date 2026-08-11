@@ -70,9 +70,10 @@
   }
 
   function selectApiBase(mode, pageUrl, localBase, productionBase) {
-    if (mode === 'local') return localBase
-    if (mode === 'production') return productionBase
-    return isLocalPageUrl(pageUrl) ? localBase : productionBase
+    // The unpacked extension is still local-only. Ignore old saved connection
+    // modes so a branch change cannot silently send public-page questions to
+    // the undeployed Render service again.
+    return localBase
   }
 
   function isSafeClickDescriptor(descriptor) {

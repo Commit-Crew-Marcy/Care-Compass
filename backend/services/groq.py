@@ -11,7 +11,9 @@ import httpx
 
 DEFAULT_GROQ_MODEL: Final = "openai/gpt-oss-20b"
 GROQ_BASE_URL: Final = "https://api.groq.com/openai/v1"
-GROQ_TIMEOUT_SECONDS: Final = 6.0
+# Groq starts after the primary hedge delay, leaving this much of the shared
+# five-second user-facing deadline.
+GROQ_TIMEOUT_SECONDS: Final = 3.75
 GROQ_MAX_OUTPUT_TOKENS: Final = 512
 
 

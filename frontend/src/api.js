@@ -207,7 +207,13 @@ export async function searchCMSMarketplacePlans(intake) {
 // are ignored — this is best-effort, not something the UI should surface.
 export function warmUpServer() {
   fetch(`${BASE}/`).catch(() => {})
-  fetch(`${BASE}/api/policyengine/warmup`, { method: 'POST' }).catch(() => {})
+  // Loading the full PolicyEngine model is useful locally, but can exhaust a
+  // small deployed web process and take the entire questionnaire API down.
+  // Production uses the lightweight catalog unless a dedicated calculation
+  // worker is configured.
+  if (import.meta.env.DEV) {
+    fetch(`${BASE}/api/policyengine/warmup`, { method: 'POST' }).catch(() => {})
+  }
 }
 
 export const getBenefit = (id) => {
