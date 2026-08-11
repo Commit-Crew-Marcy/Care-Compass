@@ -5,6 +5,7 @@ const {
   isSafeClickDescriptor,
   isLocalPageUrl,
   isSupportedPageUrl,
+  prepareContextText,
   preparePageText,
   selectApiBase,
   validateRequestedAction,
@@ -43,6 +44,16 @@ test('page text is shortened and common sensitive values are removed', () => {
   assert.doesNotMatch(prepared, /212-555-0188/)
   assert.doesNotMatch(prepared, /person@example\.com/)
   assert.doesNotMatch(prepared, /123-45-6789/)
+})
+
+test('visible dialog text is placed before the background page text', () => {
+  const context = prepareContextText(
+    'Enter your ZIP code to begin.',
+    ['Plan types. Medicare Advantage combines health and drug coverage.']
+  )
+
+  assert.ok(context.indexOf('Open dialog: Plan types') < context.indexOf('Page: Enter your ZIP'))
+  assert.match(context, /Medicare Advantage combines health and drug coverage/)
 })
 
 test('safe links can be clicked but application and form controls cannot', () => {

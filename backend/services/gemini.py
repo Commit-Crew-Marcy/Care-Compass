@@ -4,23 +4,13 @@ The browser extension sends an already-filtered semantic page summary. This
 module sends that text to Gemini and returns only model text plus one optional
 function-call payload. It never executes the requested browser action.
 """
-import logging
-import time
 from typing import Optional, Tuple
 
 import httpx
 
 
 DEFAULT_GEMINI_MODEL = "gemini-3.1-flash-lite"
-DEFAULT_GEMINI_FALLBACK_MODEL = "gemini-3-flash-preview"
 GEMINI_TIMEOUT_MS = 10_000
-
-# Only a 503/UNAVAILABLE means Gemini is transiently overloaded and a retry
-# might succeed. Other errors (bad key, quota, malformed request) will fail
-# identically on every attempt, so they raise immediately instead of adding
-# latency for no benefit.
-MAX_ATTEMPTS = 3
-RETRY_DELAYS_SECONDS = (2, 4)
 
 
 class GeminiServiceError(RuntimeError):
@@ -64,9 +54,14 @@ def generate_gemini_content(
     system_prompt: str,
     user_content: str,
     tool_definition: dict,
-    fallback_model: Optional[str] = DEFAULT_GEMINI_FALLBACK_MODEL,
+    timeout_ms: int = GEMINI_TIMEOUT_MS,
 ) -> Tuple[str, Optional[dict]]:
-    """Generate one concise answer and, optionally, one unexecuted tool call."""
+    """Generate one concise answer with exactly one model request.
+
+    Cross-provider fallback belongs at the route/orchestration layer. Keeping
+    this adapter single-model prevents an invisible retry chain from delaying
+    the browser extension while that fallback is being designed.
+    """
     try:
         from google import genai
         from google.genai import errors, types
@@ -97,54 +92,17 @@ def generate_gemini_content(
         # Keep this below the extension's own timeout so callers receive a
         # useful error instead of waiting indefinitely.
         http_options = types.HttpOptions(
-            timeout=GEMINI_TIMEOUT_MS,
+            timeout=timeout_ms,
             retry_options=types.HttpRetryOptions(attempts=1),
         )
-        models = [model]
-        if fallback_model and fallback_model != model:
-            models.append(fallback_model)
-
         with genai.Client(api_key=api_key, http_options=http_options) as client:
-            for index, candidate_model in enumerate(models):
-                try:
-                    response = client.models.generate_content(
-                        model=candidate_model,
-                        contents=user_content,
-                        config=config,
-                    )
-                    break
-                except errors.APIError as exc:
-                    has_fallback = index + 1 < len(models)
-                    if exc.code == 503 and has_fallback:
-                        continue
-                    raise
+            response = client.models.generate_content(
+                model=model,
+                contents=user_content,
+                config=config,
+            )
     except errors.APIError as exc:
         raise GeminiServiceError("Gemini API request failed") from exc
     except (httpx.NetworkError, httpx.TimeoutException, OSError) as exc:
         raise GeminiServiceError("Gemini could not be reached") from exc
-    response = None
-    for attempt in range(1, MAX_ATTEMPTS + 1):
-        try:
-            with genai.Client(api_key=api_key) as client:
-                response = client.models.generate_content(
-                    model=model,
-                    contents=user_content,
-                    config=config,
-                )
-            break
-        except errors.APIError as exc:
-            is_overloaded = exc.code == 503 or exc.status == "UNAVAILABLE"
-            if not is_overloaded or attempt == MAX_ATTEMPTS:
-                logger.error(f"Gemini call failed: {exc}")
-                raise GeminiServiceError("Gemini API request failed") from exc
-            delay = RETRY_DELAYS_SECONDS[attempt - 1]
-            logger.warning(
-                f"Gemini returned 503 UNAVAILABLE (attempt {attempt}/{MAX_ATTEMPTS}), "
-                f"retrying in {delay}s: {exc}"
-            )
-            time.sleep(delay)
-        except OSError as exc:
-            logger.error(f"Gemini call failed: {exc}")
-            raise GeminiServiceError("Gemini could not be reached") from exc
-
     return extract_gemini_response(response, tool_definition["name"])

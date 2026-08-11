@@ -14,6 +14,10 @@ importScripts('shared.js')
 // ordinary website, not just unsupported ones.
 chrome.action.onClicked.addListener((tab) => {
   if (!tab?.id) return
+  // Start waking a sleeping Render service while the user reads the panel.
+  // This overlaps cold-start time with page-context loading instead of adding
+  // it after the user sends their first question.
+  warmUpApiForPage(tab.url).catch(() => {})
   // sidePanel.open() can throw synchronously (not just reject) for some
   // argument/state errors — wrapped so a failure here can never stop the
   // CARE_COMPASS_ACTIVE_TAB message below from going out. The panel needs
@@ -32,7 +36,7 @@ chrome.action.onClicked.addListener((tab) => {
 const LOCAL_API_BASE = 'http://localhost:8000'
 const PRODUCTION_API_BASE = 'https://care-compass-4gj5.onrender.com'
 const EXTENSION_CHAT_PATH = '/api/ai/extension/chat'
-const RETRYABLE_STATUSES = new Set([502, 503, 504])
+const REQUEST_TIMEOUT_MS = 15_000
 
 function getApiMode() {
   return new Promise((resolve) => {
@@ -62,7 +66,7 @@ async function parseResponse(response) {
 
 async function requestGemini(body, pageUrl) {
   const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 75000)
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
 
   try {
     const apiBase = await apiBaseForPage(pageUrl)
@@ -74,6 +78,22 @@ async function requestGemini(body, pageUrl) {
     })
     const data = await parseResponse(response)
     return { response, data }
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+async function warmUpApiForPage(pageUrl) {
+  if (!CareCompassExtension.isSupportedPageUrl(pageUrl)) return
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+
+  try {
+    const apiBase = await apiBaseForPage(pageUrl)
+    await fetch(`${apiBase}/`, { signal: controller.signal })
+  } catch {
+    // Best effort only. A real chat request will show a useful error if the
+    // API remains unavailable.
   } finally {
     clearTimeout(timeout)
   }
@@ -93,11 +113,7 @@ async function askGemini(message) {
   }
 
   try {
-    let result = await requestGemini(body, message.pageContext.url)
-    if (RETRYABLE_STATUSES.has(result.response.status)) {
-      await new Promise((resolve) => setTimeout(resolve, 2000))
-      result = await requestGemini(body, message.pageContext.url)
-    }
+    const result = await requestGemini(body, message.pageContext.url)
 
     if (!result.response.ok) {
       const detail = typeof result.data?.detail === 'string'

@@ -1,11 +1,10 @@
-"""Pure response-parsing tests for the Gemini adapter."""
-import time
+"""Pure request/response tests for the single-call Gemini adapter."""
 from types import SimpleNamespace
 
 import pytest
 
 from services.gemini import (
-    DEFAULT_GEMINI_FALLBACK_MODEL,
+    DEFAULT_GEMINI_MODEL,
     GEMINI_TIMEOUT_MS,
     GeminiServiceError,
     extract_gemini_response,
@@ -18,6 +17,34 @@ def response_with(*, texts=(), calls=()):
     content = SimpleNamespace(parts=parts)
     candidate = SimpleNamespace(content=content)
     return SimpleNamespace(candidates=[candidate], function_calls=list(calls))
+
+
+def extension_tool():
+    return {
+        "name": "suggest_extension_action",
+        "description": "Suggest one safe action.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"type": {"type": "string"}},
+            "required": ["type"],
+        },
+    }
+
+
+def call_gemini(**overrides):
+    arguments = {
+        "api_key": "test-key",
+        "model": "test-model",
+        "system_prompt": "Use short sentences.",
+        "user_content": "Explain this page.",
+        "tool_definition": extension_tool(),
+    }
+    arguments.update(overrides)
+    return generate_gemini_content(**arguments)
+
+
+def test_default_model_is_stable_gemini_31_flash_lite():
+    assert DEFAULT_GEMINI_MODEL == "gemini-3.1-flash-lite"
 
 
 def test_extracts_text_and_the_expected_function_call():
@@ -42,7 +69,9 @@ def test_ignores_function_calls_with_an_unexpected_name():
         texts=("Safe answer.",),
         calls=(SimpleNamespace(name="submit_form", args={"type": "submit_form"}),),
     )
+
     text, action = extract_gemini_response(response, "suggest_extension_action")
+
     assert text == "Safe answer."
     assert action is None
 
@@ -52,10 +81,10 @@ def test_rejects_an_empty_gemini_response():
         extract_gemini_response(response_with(), "suggest_extension_action")
 
 
-def test_builds_the_official_sdk_request_without_executing_the_tool(monkeypatch):
+def test_builds_one_official_sdk_request_without_executing_the_tool(monkeypatch):
     from google import genai
 
-    captured = {}
+    captured = {"call_count": 0}
     fake_response = response_with(
         texts=("Short explanation.",),
         calls=(
@@ -68,6 +97,7 @@ def test_builds_the_official_sdk_request_without_executing_the_tool(monkeypatch)
 
     class FakeModels:
         def generate_content(self, **kwargs):
+            captured["call_count"] += 1
             captured.update(kwargs)
             return fake_response
 
@@ -84,21 +114,8 @@ def test_builds_the_official_sdk_request_without_executing_the_tool(monkeypatch)
             return False
 
     monkeypatch.setattr(genai, "Client", FakeClient)
-    text, action = generate_gemini_content(
-        api_key="test-key",
-        model="test-model",
-        system_prompt="Use short sentences.",
-        user_content="Explain this page.",
-        tool_definition={
-            "name": "suggest_extension_action",
-            "description": "Suggest one safe action.",
-            "input_schema": {
-                "type": "object",
-                "properties": {"type": {"type": "string"}},
-                "required": ["type"],
-            },
-        },
-    )
+
+    text, action = call_gemini()
 
     assert text == "Short explanation."
     assert action["type"] == "scroll_to_element"
@@ -106,73 +123,67 @@ def test_builds_the_official_sdk_request_without_executing_the_tool(monkeypatch)
     assert captured["model"] == "test-model"
     assert captured["contents"] == "Explain this page."
     assert captured["config"].automatic_function_calling.disable is True
+    assert captured["config"].thinking_config.thinking_budget == 0
     assert captured["http_options"].timeout == GEMINI_TIMEOUT_MS
     assert captured["http_options"].retry_options.attempts == 1
+    assert captured["call_count"] == 1
 
 
-def test_uses_fallback_model_when_primary_model_is_busy(monkeypatch):
+def test_allows_the_extension_to_use_a_shorter_timeout(monkeypatch):
+    from google import genai
+
+    captured = {}
+
+    class FakeModels:
+        def generate_content(self, **kwargs):
+            return response_with(texts=("Short explanation.",))
+
+    class FakeClient:
+        def __init__(self, api_key, http_options):
+            captured["http_options"] = http_options
+            self.models = FakeModels()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+    monkeypatch.setattr(genai, "Client", FakeClient)
+
+    call_gemini(timeout_ms=5_000)
+
+    assert captured["http_options"].timeout == 5_000
+
+
+@pytest.mark.parametrize(
+    ("error_class", "status_code", "status_name"),
+    (
+        ("ServerError", 503, "UNAVAILABLE"),
+        ("ClientError", 401, "UNAUTHENTICATED"),
+        ("ClientError", 429, "RESOURCE_EXHAUSTED"),
+    ),
+)
+def test_api_errors_do_not_trigger_hidden_model_retries(
+    monkeypatch, error_class, status_code, status_name
+):
     from google import genai
     from google.genai import errors
 
     requested_models = []
-    fake_response = response_with(texts=("The fallback worked.",))
 
-    class FakeModels:
+    class FailedModels:
         def generate_content(self, **kwargs):
             requested_models.append(kwargs["model"])
-            if kwargs["model"] == "busy-model":
-                raise errors.ServerError(
-                    503,
-                    {
-                        "error": {
-                            "code": 503,
-                            "message": "High demand",
-                            "status": "UNAVAILABLE",
-                        }
-                    },
-                )
-            return fake_response
+            exception_type = getattr(errors, error_class)
+            raise exception_type(
+                status_code,
+                {"status": status_name, "message": "request failed"},
+            )
 
     class FakeClient:
         def __init__(self, api_key, http_options):
-            self.models = FakeModels()
-
-
-def _call_generate_gemini_content():
-    return generate_gemini_content(
-        api_key="test-key",
-        model="test-model",
-        system_prompt="Use short sentences.",
-        user_content="Explain this page.",
-        tool_definition={
-            "name": "suggest_extension_action",
-            "description": "Suggest one safe action.",
-            "input_schema": {
-                "type": "object",
-                "properties": {"type": {"type": "string"}},
-                "required": ["type"],
-            },
-        },
-    )
-
-
-def test_retries_on_503_unavailable_and_succeeds_on_a_later_attempt(monkeypatch):
-    from google import genai
-    from google.genai import errors
-
-    fake_response = response_with(texts=("Recovered after overload.",))
-    call_count = {"n": 0}
-
-    class FlakyModels:
-        def generate_content(self, **kwargs):
-            call_count["n"] += 1
-            if call_count["n"] < 3:
-                raise errors.ServerError(503, {"status": "UNAVAILABLE", "message": "overloaded"})
-            return fake_response
-
-    class FakeClient:
-        def __init__(self, api_key):
-            self.models = FlakyModels()
+            self.models = FailedModels()
 
         def __enter__(self):
             return self
@@ -181,127 +192,8 @@ def test_retries_on_503_unavailable_and_succeeds_on_a_later_attempt(monkeypatch)
             return False
 
     monkeypatch.setattr(genai, "Client", FakeClient)
-    text, action = generate_gemini_content(
-        api_key="test-key",
-        model="busy-model",
-        system_prompt="Use short sentences.",
-        user_content="Explain this page.",
-        tool_definition={
-            "name": "suggest_extension_action",
-            "description": "Suggest one safe action.",
-            "input_schema": {
-                "type": "object",
-                "properties": {"type": {"type": "string"}},
-                "required": ["type"],
-            },
-        },
-    )
-
-    assert text == "The fallback worked."
-    assert action is None
-    assert requested_models == ["busy-model", DEFAULT_GEMINI_FALLBACK_MODEL]
-    sleep_calls = []
-    monkeypatch.setattr(genai, "Client", FakeClient)
-    monkeypatch.setattr(time, "sleep", lambda seconds: sleep_calls.append(seconds))
-
-    text, _ = _call_generate_gemini_content()
-
-    assert text == "Recovered after overload."
-    assert call_count["n"] == 3
-    assert sleep_calls == [2, 4]
-
-
-def test_gives_up_after_three_attempts_on_persistent_503(monkeypatch):
-    from google import genai
-    from google.genai import errors
-
-    call_count = {"n": 0}
-
-    class AlwaysOverloadedModels:
-        def generate_content(self, **kwargs):
-            call_count["n"] += 1
-            raise errors.ServerError(503, {"status": "UNAVAILABLE", "message": "overloaded"})
-
-    class FakeClient:
-        def __init__(self, api_key):
-            self.models = AlwaysOverloadedModels()
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, traceback):
-            return False
-
-    sleep_calls = []
-    monkeypatch.setattr(genai, "Client", FakeClient)
-    monkeypatch.setattr(time, "sleep", lambda seconds: sleep_calls.append(seconds))
 
     with pytest.raises(GeminiServiceError):
-        _call_generate_gemini_content()
+        call_gemini(model=DEFAULT_GEMINI_MODEL)
 
-    assert call_count["n"] == 3
-    assert sleep_calls == [2, 4]
-
-
-def test_does_not_retry_on_401_unauthenticated(monkeypatch):
-    from google import genai
-    from google.genai import errors
-
-    call_count = {"n": 0}
-
-    class BadKeyModels:
-        def generate_content(self, **kwargs):
-            call_count["n"] += 1
-            raise errors.ClientError(401, {"status": "UNAUTHENTICATED", "message": "bad key"})
-
-    class FakeClient:
-        def __init__(self, api_key):
-            self.models = BadKeyModels()
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, traceback):
-            return False
-
-    sleep_calls = []
-    monkeypatch.setattr(genai, "Client", FakeClient)
-    monkeypatch.setattr(time, "sleep", lambda seconds: sleep_calls.append(seconds))
-
-    with pytest.raises(GeminiServiceError):
-        _call_generate_gemini_content()
-
-    assert call_count["n"] == 1
-    assert sleep_calls == []
-
-
-def test_does_not_retry_on_429_quota_exceeded(monkeypatch):
-    from google import genai
-    from google.genai import errors
-
-    call_count = {"n": 0}
-
-    class QuotaExceededModels:
-        def generate_content(self, **kwargs):
-            call_count["n"] += 1
-            raise errors.ClientError(429, {"status": "RESOURCE_EXHAUSTED", "message": "quota"})
-
-    class FakeClient:
-        def __init__(self, api_key):
-            self.models = QuotaExceededModels()
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, traceback):
-            return False
-
-    sleep_calls = []
-    monkeypatch.setattr(genai, "Client", FakeClient)
-    monkeypatch.setattr(time, "sleep", lambda seconds: sleep_calls.append(seconds))
-
-    with pytest.raises(GeminiServiceError):
-        _call_generate_gemini_content()
-
-    assert call_count["n"] == 1
-    assert sleep_calls == []
+    assert requested_models == [DEFAULT_GEMINI_MODEL]

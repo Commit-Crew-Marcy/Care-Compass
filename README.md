@@ -38,10 +38,11 @@ Team Commit Crew — Zoulkarnein (Project Lead), Ashar (Scrum Master), Ibrahima 
    Gemini API — the Python engine decides eligibility, the AI only
    explains. Requires GEMINI_API_KEY on the server; the panel degrades
    gracefully when the key is not set.
-7. The optional Chrome Browser Guide also uses Gemini to explain the visible page
+7. The optional Chrome Browser Guide uses Gemini to explain the visible page
    in short, senior-friendly language and suggest one safe navigation action.
-   Page actions are validated by both the backend and extension, and clicks
-   require confirmation.
+   If Gemini is unavailable, an optional Groq fallback can still provide a
+   text-only answer. Page actions are validated by both the backend and
+   extension, and clicks require confirmation.
 
 ## Project structure
 
@@ -135,9 +136,12 @@ No code changes needed — `db/database.py` reads the env var.
 
 Copy `backend/.env.example` to `backend/.env` and set `GEMINI_API_KEY` — it
 powers both the website's floating assistant and the Chrome Browser Guide.
-Both default to the stable `gemini-3.5-flash` model; override it with
-`GEMINI_MODEL` if needed. The key remains on the backend and must never be
-placed in extension JavaScript or `manifest.json`.
+Both default to the stable `gemini-3.1-flash-lite` model. `GEMINI_MODEL`
+configures the website chat, while `EXTENSION_GEMINI_MODEL` independently
+configures the Browser Guide. Set `GROQ_API_KEY` to let the Browser Guide fall
+back to Groq's `openai/gpt-oss-20b` for a text-only response when Gemini is
+unavailable. Both keys remain on the backend and must never be placed in
+extension JavaScript or `manifest.json`.
 
 ## Testing the API directly
 
@@ -156,7 +160,8 @@ curl -X POST http://localhost:8000/api/eligibility/check \
 3. Settings: Root Directory `backend`, Build Command `pip install -r requirements.txt`,
    Start Command `uvicorn main:app --host 0.0.0.0 --port $PORT`
 4. Add environment variable `SECRET_KEY` set to any long random string. Add
-   `GEMINI_API_KEY` to enable the website assistant and the Chrome Browser Guide.
+   `GEMINI_API_KEY` to enable the website assistant and Browser Guide, plus
+   `GROQ_API_KEY` to enable the Browser Guide's fallback.
 5. Deploy, then open the Render shell and run `python -m db.seed` once
 6. Copy your Render URL (e.g. https://carecompass-api.onrender.com)
 
